@@ -1,0 +1,28 @@
+
+隐写使用的方法是 盲水印 (blind-watermark)。
+
+文件结构如下
+
+Project_Root/
+│
+├── 01_embed.py           # 模块1：隐写代码
+├── 02_extract.py         # 模块2：提取代码
+├── 03_evaluate.py        # 模块3：评价代码
+│
+├── source_files/         # 【原始目录】存放原始 .png 图片和同名 .txt
+│   ├── demo1.png
+│   └── demo1.txt
+│
+├── embedded_files/       # 【隐写结果目录】脚本会自动生成带水印图片到这里
+│
+└── decoded_results/      # 【解码结果目录】脚本会自动提取图片和文字到这里
+
+
+依赖库安装
+
+pip install blind-watermark opencv-python
+
+版本核对
+Successfully installed PyWavelets-1.3.0 blind-watermark-0.4.4
+opencv-python    4.12.0.88
+
