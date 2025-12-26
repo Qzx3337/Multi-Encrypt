@@ -3,7 +3,9 @@ import textwrap
 import cv2
 import sys
 
-# sys.path.append('/tmp/pycharm_project_60/code/gym-lorenz')  # 或者确切的安装路径（在服务器上运行时候）
+# sys.path.append('/tmp/pycharm_project_60/code/gym-lorenz') 
+sys.path.append('/code/multy_encry_demo1/')  
+
 import gym_lorenz
 from PIL import Image
 
@@ -80,12 +82,12 @@ class KalmanFilter1D:
         return self.estimate
 
 
-def get_original_img_path():
+def get_plain_img_path():
     path = "img/d01.png"
     return path
 
 
-def get_encrypted_img_path():
+def get_cipher_img_path():
     path = "img/encrypted_image.png"
     return path
 
@@ -313,7 +315,7 @@ def recover_image(b, g, r, iname, path):
     img[:, :, 1] = g
     img[:, :, 0] = b
     cv2.imwrite((path), img)
-    print("saved ecrypted image successfully")
+    print("image saved to:", path)
     return img
 
 
@@ -323,11 +325,11 @@ def testdna(seq1, seq2):
 
     are_equivalent = np.array_equal(I1, I2)
     print("Are the matrices equivalent?", are_equivalent)  # 输出: Are the matrices equivalent? True
-    print("I1 :")
-    print(I1.flat[:10])  # 使用 .flat 获取一个迭代器，可以按行优先顺序访问元素
+    # print("I1 :")
+    # print(I1.flat[:10])  # 使用 .flat 获取一个迭代器，可以按行优先顺序访问元素
 
-    print("\nI2 :")
-    print(I2.flat[:10])
+    # print("\nI2 :")
+    # print(I2.flat[:10])
 
 
 # 定义区间及其对应的目标整数
@@ -343,26 +345,34 @@ def map_to_integer(value):
     return round(value)  # 如果不在任何区间内，默认四舍五入
 
 
-def process_array(arr):
-    # 四舍五入并映射到区间
-    # mapped_arr = np.array([map_to_integer(num) for num in arr])
 
-    # 取模运算并转换为 uint8
-    processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
-    # processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
-    return processed_arr
-
-
-class _password:
-    def __init__(self, dec_sequences=None):
-        self.dec_sequences = dec_sequences
-
-
-def encry2(x_arrays, original_img_path: str, encrypted_img_path: str):
+def encrypt_image(seed, source_path, dest_path):
     """
-    加密过程
+    seed: 种子
+    source_path: 原图路径 (Input)
+    dest_path: 加密后的输出路径 (Output)
+    Return: key (密码)
     """
-    blue, green, red = decompose_matrix(original_img_path)  # 生成rgb M,N 1024, 1280
+    pass
+    # ... code ...
+    # return key
+
+def decrypt_image(key, source_path, dest_path):
+    """
+    key: 密码
+    source_path: 加密过的图片路径 (Input)
+    dest_path: 解密后的输出路径 (Output)
+    """
+    pass
+    # ... code ...
+
+
+def encrypt(seed, plain_path, cipher_path):
+    x1, x2, x3, x4, x5, x6, x7, x8 = seed
+    # print(x1.flat[:20])
+    # print(x5.flat[:20])
+    blue, green, red = decompose_matrix(plain_path)  # 生成rgb M,N 1024, 1280
+
 
     i1 = np.sum(red)
     i2 = np.sum(green)
@@ -379,7 +389,7 @@ def encry2(x_arrays, original_img_path: str, encrypted_img_path: str):
     blocks_I2 = split_into_blocks(green, p)
     blocks_I3 = split_into_blocks(blue, p)
 
-    test_I2_blocks = blocks_I2
+    # test_I2_blocks = blocks_I2
 
     # 获取 Q 的子块
     blocks_Q = split_into_blocks(Q, p)
@@ -394,11 +404,24 @@ def encry2(x_arrays, original_img_path: str, encrypted_img_path: str):
     bin_blocks_I3 = convert_to_8bit_binary(encrypted_blocks_I3)
 
 
-    x1 = (np.mod(np.round(x_arrays[0]), 8) + 1).astype(np.uint8)
-    x2 = (np.mod(np.round(x_arrays[1]), 8) + 1).astype(np.uint8)
-    x3 = (np.mod(np.round(x_arrays[2]), 8) + 1).astype(np.uint8)
-    x4 = (np.mod(np.round(x_arrays[3]), 8) + 1).astype(np.uint8)
+    x1 = (np.mod(np.round(x1), 8) + 1).astype(np.uint8)
+    x2 = (np.mod(np.round(x2) , 8) + 1).astype(np.uint8)
+    x5 = (np.mod(np.round(x5), 8) + 1).astype(np.uint8)
+    x6 = (np.mod(np.round(x6), 8) + 1).astype(np.uint8)
+    x3 = (np.mod(np.round(x3) , 8) + 1).astype(np.uint8)
+    x4 = (np.mod(np.round(x4) , 8) + 1).astype(np.uint8)
+    x7 = (np.mod(np.round(x7), 8) + 1).astype(np.uint8)
+    x8 = (np.mod(np.round(x8), 8) + 1).astype(np.uint8)
 
+
+    def process_array(arr):
+        # 四舍五入并映射到区间
+        # mapped_arr = np.array([map_to_integer(num) for num in arr])
+
+        # 取模运算并转换为 uint8
+        processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
+        # processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
+        return processed_arr
 
     # 对每个数组应用该函数
 
@@ -413,14 +436,20 @@ def encry2(x_arrays, original_img_path: str, encrypted_img_path: str):
         x3 = process_array(x3)
         x4 = process_array(x4)
 
+        x5 = process_array_with_kalman(x5)
+        x6 = process_array_with_kalman(x6)
+        x7 = process_array_with_kalman(x7)
+        x8 = process_array_with_kalman(x8)
+
+        x5 = process_array(x5)
+        x6 = process_array(x6)
+        x7 = process_array(x7)
+        x8 = process_array(x8)
+
 
     # print(x1.flat[:20])
     # print(x5.flat[:20])
 
-    # x5 = x1
-    # x6 = x2
-    # x7 = x3
-    # x8 = x4
 
     # 调用函数进行转换
     dna_sequences_I1 = binary_to_dna(bin_blocks_I1, x1, coding_rules)
@@ -450,91 +479,23 @@ def encry2(x_arrays, original_img_path: str, encrypted_img_path: str):
     I2_prime = reshape_blocks(dec_sequences_I2, p)
     I3_prime = reshape_blocks(dec_sequences_I3, p)
 
-    recover_image(I1_prime, I2_prime, I3_prime, original_img_path, encrypted_img_path)
+    recover_image(I1_prime, I2_prime, I3_prime, plain_path, cipher_path)
 
-    password = _password((dec_sequences_I1, dec_sequences_I2, dec_sequences_I3))
-    return password
-
-
-
-def extract_channels_from_path(path: str):
-    """
-    读取指定路径的图片，并分离出 R, G, B 通道数组。
-    
-    Args:
-        path: 图片的路径
-        
-    Returns:
-        r, g, b: 分别对应红、绿、蓝通道的 numpy 数组
-    """
-    # 1. 读取图片
-    img = cv2.imread(path)
-    
-    # 检查图片是否读取成功
-    if img is None:
-        print(f"Error: 无法从路径 {path} 读取图片")
-        return None, None, None
-
-    # 2. 分离通道
-    # 注意：OpenCV 读取的图片格式为 BGR (Blue, Green, Red)
-    # img[:, :, 0] 是蓝色通道 (B)
-    # img[:, :, 1] 是绿色通道 (G)
-    # img[:, :, 2] 是红色通道 (R)
-    
-    b = img[:, :, 0]
-    g = img[:, :, 1]
-    r = img[:, :, 2]
-    
-    return b, g, r
+    dec_seed = (x5, x6, x7, x8)
+    dec_sequences = (dec_sequences_I1, dec_sequences_I2, dec_sequences_I3)
+    decry_key = (dec_seed, dec_sequences, blocks_Q)
+    return decry_key
 
 
-def decry2(x_arrays, password: _password, encrypted_img_path: str, decrypted_img_path: str):
-    """
-    解密过程
-    """
+def decrypt(decry_key, cipher_path, decrypted_path):
 
-    original_img_path = get_original_img_path()
-
-    blue, green, red = decompose_matrix(original_img_path)  # 生成rgb M,N 1024, 1280
-
-    i1 = np.sum(red)
-    i2 = np.sum(green)
-    theta = 3.9999  # Example parameter value
-    initial_value = (i1 + i2) / (255 * M_image * N_image * 2)  # Example initial value
-    num_iterations = M_image * N_image  # Number of iterations
-
-    logistic_sequence = logistic_map(theta, initial_value, num_iterations - 1)
-    # print(len(logistic_sequence))
-
-    Q = mat_reshape(logistic_sequence)
-
-    blocks_Q = split_into_blocks(Q, p)
-
-    
-    x5 = (np.mod(np.round(x_arrays[4]), 8) + 1).astype(np.uint8)
-    x6 = (np.mod(np.round(x_arrays[5]), 8) + 1).astype(np.uint8)
-    x7 = (np.mod(np.round(x_arrays[6]), 8) + 1).astype(np.uint8)
-    x8 = (np.mod(np.round(x_arrays[7]), 8) + 1).astype(np.uint8)
-
-    for i in range(15):
-        x5 = process_array_with_kalman(x5)
-        x6 = process_array_with_kalman(x6)
-        x7 = process_array_with_kalman(x7)
-        x8 = process_array_with_kalman(x8)
-        
-        x5 = process_array(x5)
-        x6 = process_array(x6)
-        x7 = process_array(x7)
-        x8 = process_array(x8)
-
-
-    dec_sequences_I1 = password.dec_sequences[0]
-    dec_sequences_I2 = password.dec_sequences[1]
-    dec_sequences_I3 = password.dec_sequences[2]
-
+    dec_seed, dec_sequences, blocks_Q = decry_key
+    x5, x6, x7, x8 = dec_seed
+    dec_sequences_I1, dec_sequences_I2, dec_sequences_I3 = dec_sequences
     I1_prime = reshape_blocks(dec_sequences_I1, p)
     I2_prime = reshape_blocks(dec_sequences_I2, p)
     I3_prime = reshape_blocks(dec_sequences_I3, p)
+
 
     blocks_I1 = split_into_blocks(I1_prime, p)
     blocks_I2 = split_into_blocks(I2_prime, p)
@@ -588,34 +549,29 @@ def decry2(x_arrays, password: _password, encrypted_img_path: str, decrypted_img
     I1_prime = reshape_blocks(dncrypted_blocks_I1, p)
     I2_prime = reshape_blocks(dncrypted_blocks_I2, p)
     I3_prime = reshape_blocks(dncrypted_blocks_I3, p)
+    
+    recover_image(I1_prime, I2_prime, I3_prime, cipher_path, decrypted_path)
 
-    recover_image(I1_prime, I2_prime, I3_prime, get_original_img_path(), decrypted_img_path)
+    # ... code ...
 
-    # TODO: 将这些值作为返回值用于外部测试。
+
+
+def test2(seed, plain_path=get_plain_img_path(), cipher_path=get_cipher_img_path(), decrypted_path=get_decrypted_img_path()):
+
+    decry_key = encrypt(seed, plain_path, cipher_path)
+
+    decrypt(decry_key, cipher_path, decrypted_path)
+    # =========================================================
+
     # testdna(test_I2_blocks, dncrypted_blocks_I2)
+
     # are_equivalent = np.array_equal(green, I2_prime)
     # print("Are the matrices equivalent?", are_equivalent)  # 输出: Are the matrices equivalent? True
-
-
-def test2(x_arrays):
-    """
-    TODO: 追踪替换 encrypath。
-    """
-    # print(x1.flat[:20])
-    # print(x5.flat[:20])
-
-    # ===== 加密 =====
-    password = encry2(x_arrays, get_original_img_path(), get_encrypted_img_path())
-    # ===== 加密完成 =====
-    # ===== 解密 =====
-    decry2(x_arrays, password, get_encrypted_img_path(), get_decrypted_img_path())
-    # ===== 解密完成 =====
 
 
 
 def generate(num):
     env = gym.make('lorenz_transient-v0')
-    # model = PPO.load('../lorenz_gtp_m0', env, verbose=1)
     model = PPO.load('lorenz_targeting_1280k', env, verbose=1)
     # 创建并保存每种观测值对应的所有线条数据
     list_inital = []
@@ -656,6 +612,40 @@ def generate(num):
     return list_obs1, list_obs2, list_obs3, list_obs4, list_obs5, list_obs6, list_obs7, list_obs8
 
 
+def plot_rgb_histogram(image_path):
+    # 读取图片
+    image = cv2.imread(image_path)
+
+    # 检查图片是否成功加载
+    if image is None:
+        print(f"Error: Unable to load image at {image_path}")
+        return
+
+    # 将BGR图像转换为RGB图像（因为OpenCV默认读取的是BGR格式）
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # 计算每个通道的直方图
+    hist_red, bins_red = np.histogram(image_rgb[:, :, 0].ravel(), bins=256, range=[0, 256])
+    hist_green, bins_green = np.histogram(image_rgb[:, :, 1].ravel(), bins=256, range=[0, 256])
+    hist_blue, bins_blue = np.histogram(image_rgb[:, :, 2].ravel(), bins=256, range=[0, 256])
+
+    # 定义绘制直方图的函数
+    def plot_histogram(hist, bins, color):
+        plt.figure(figsize=(6, 4))
+        plt.bar(bins[:-1], hist, width=1, color=color, alpha=0.7)
+        plt.xlim([0, 256])
+        plt.show()
+
+    # 绘制并显示红色通道的直方图
+    plot_histogram(hist_red, bins_red, 'red')
+
+    # 绘制并显示绿色通道的直方图
+    plot_histogram(hist_green, bins_green, 'green')
+
+    # 绘制并显示蓝色通道的直方图
+    plot_histogram(hist_blue, bins_blue, 'blue')
+
+
 def calculate_correlation(image, direction):
     if direction == 'horizontal':
         return np.corrcoef(image[:, :-1].ravel(), image[:, 1:].ravel())[0, 1]
@@ -694,14 +684,14 @@ def plot_correlation_distribution(image, channel, direction):
     plt.show()
 
 
-def generate_dis_pic():
+def generate_dis_pic(plain_path=get_plain_img_path(), cipher_path=get_cipher_img_path()):
     """
-    生成相关系数分布图
+    生成原图和加密图的相关系数及相关分布图
     """
     # 加密前图像路径
-    original_image_path = get_original_img_path()
+    original_image_path = plain_path
     # 加密后图像路径
-    encrypted_image_path = get_encrypted_img_path()
+    encrypted_image_path = cipher_path
 
     # 读取图像
     original_image = cv2.imread(original_image_path)
@@ -743,6 +733,7 @@ def generate_dis_pic():
     plot_correlation_distribution(encrypted_image_rgb, 'R', 'diagonal')
 
 
+
 def process_array_with_kalman(arr, measurement_uncertainty=1e-2, process_variance=1e-5):
     # 使用数组的第一个值作为初始估计值
     initial_estimate = arr[0]
@@ -751,7 +742,7 @@ def process_array_with_kalman(arr, measurement_uncertainty=1e-2, process_varianc
     # 对数组中的每个元素进行卡尔曼滤波
     filtered_arr = np.array([kf.update(num) for num in arr])
 
-    print(filtered_arr.flat[:20])
+    # print(filtered_arr.flat[:20])
 
     return filtered_arr
 
@@ -798,38 +789,27 @@ def calculate_correlation_coefficients(pairs_list):
     return coefficients
 
 
+def print_results(coefficients):
+    print("Image\t\tHorizontal\tVertical\tDiagonal")
+    print(f"Original Image\t{coefficients[0]:.5f}\t\t{coefficients[1]:.5f}\t\t{coefficients[2]:.5f}")
+
+
+def plot_correlation_distributions(pairs_list):
+    fig, axs = plt.subplots(1, len(pairs_list), figsize=(15, 5))
+
+    for ax, pairs in zip(axs, pairs_list):
+        x_values = [pair[0] for pair in pairs]
+        y_values = [pair[1] for pair in pairs]
+
+        ax.scatter(x_values, y_values, s=1, c='blue', alpha=0.5)
+        ax.set_xlim(0, 255)
+        ax.set_ylim(0, 255)
+
+    plt.tight_layout()
+    plt.show()
+
 
 def process_and_visualize(image_path):
-    """
-    处理图像并可视化相关系数分布
-
-    parameters: 图像路径
-
-    读取图像，计算水平、垂直和对角线方向的相关系数分布，并绘制散点图。
-    计算相关性系数并输出结果。
-    生成相关系数分布图表。
-    """
-
-    def print_results(coefficients):
-        print("Image\t\tHorizontal\tVertical\tDiagonal")
-        print(f"Original Image\t{coefficients[0]:.5f}\t\t{coefficients[1]:.5f}\t\t{coefficients[2]:.5f}")
-
-
-    def plot_correlation_distributions(pairs_list):
-        fig, axs = plt.subplots(1, len(pairs_list), figsize=(15, 5))
-
-        for ax, pairs in zip(axs, pairs_list):
-            x_values = [pair[0] for pair in pairs]
-            y_values = [pair[1] for pair in pairs]
-
-            ax.scatter(x_values, y_values, s=1, c='blue', alpha=0.5)
-            ax.set_xlim(0, 255)
-            ax.set_ylim(0, 255)
-
-        plt.tight_layout()
-        plt.show()
-
-
     img = load_image(image_path, channel='B')
     horizontal_pairs, vertical_pairs, diagonal_pairs = calculate_correlation_distribution(img)
     pairs_list = [horizontal_pairs, vertical_pairs, diagonal_pairs]
@@ -847,16 +827,8 @@ def process_and_visualize(image_path):
 import numpy as np
 from PIL import Image
 
+
 def calculate_entropy(image_path):
-    """
-    计算图像的信息熵（范围为0-8）
-
-    parameters: 图像路径
-
-    信息熵是衡量图像信息量和复杂度的指标，反映了图像中像素值分布的均匀程度。
-
-    信息熵越高，图像越混乱随机。
-    """
     # 打开图像并转换为灰度图像
     img = Image.open(image_path).convert('L')
     # 转换为numpy数组
@@ -877,17 +849,7 @@ def calculate_entropy(image_path):
     return entropy
 
 
-
 def NPCR(img1, img2):
-    '''
-    计算像素数变化率 (NPCR)
-
-    parameters: 图像路径
-
-    NCPR，图像加密指标，衡量两幅图像之间发生变化的像素的比例，用于评估加密算法的扩散性及抗差分攻击能力。
-    
-    NPCR 值越高，表示两幅图像之间的差异越大。
-    '''
     # opencv颜色通道顺序为BGR
     img1 = cv2.imread(img1)
     img2 = cv2.imread(img2)
@@ -907,18 +869,7 @@ def NPCR(img1, img2):
     return R_npcr, G_npcr, B_npcr
 
 
-
 def UACI(img1, img2):
-    """
-    计算两张图像之间的平均变化强度 (UACI)
-
-    衡量两幅图像之间像素值的平均变化幅度，用于评估加密图像与原图（或另一加密图）的差异强度。
-
-    UACI 值越高，表示两幅图像之间的差异越大。
-
-    parameters: 图像路径
-    """
-
     img1 = cv2.imread(img1)
     img2 = cv2.imread(img2)
     w, h, _ = img1.shape
@@ -946,44 +897,81 @@ def UACI(img1, img2):
     return R_uaci, G_uaci, B_uaci
 
 
+def generate_seed():
+    num = int((M_image * N_image) / (p * p))
+    list_x1, list_x2, list_x3, list_x4, list_x5, list_x6, list_x7, list_x8 = generate(num + 1500)
 
-# program exec9
+    x1 = np.array(list_x1)
+    x2 = np.array(list_x2)
+    x3 = np.array(list_x3)
+    x4 = np.array(list_x4)
+    x5 = np.array(list_x5)
+    x6 = np.array(list_x6)
+    x7 = np.array(list_x7)
+    x8 = np.array(list_x8)
+
+    return x1, x2, x3, x4, x5, x6, x7, x8
+
+
+def check_decryption(plain_path, decrypted_path):
+    plain_img = cv2.imread(plain_path)
+    decrypted_img = cv2.imread(decrypted_path)
+    if plain_img.shape != decrypted_img.shape:
+        return False
+    difference = cv2.absdiff(plain_img, decrypted_img)
+    b, g, r = cv2.split(difference)
+    if cv2.countNonZero(b) == 0 and cv2.countNonZero(g) == 0 and cv2.countNonZero(r) == 0:
+        return True
+    else:
+        return False
+
+
+def encrypt_and_decrypt(plain_path=None, cipher_path=None, decrypted_path=None):
+    if plain_path is None or cipher_path is None or decrypted_path is None:
+        # traceback.print_stack()
+        return False
+    seed = generate_seed()
+    decry_key = encrypt(seed, plain_path, cipher_path)
+    decrypt(decry_key, cipher_path, decrypted_path)
+    if check_decryption(plain_path, decrypted_path):
+        print("Decryption successful: The decrypted image matches the original.")
+        return True
+    else:
+        print("Decryption failed: The decrypted image does not match the original.")
+        return False
+
+
+
 if __name__ == "__main__":
 
 
-    num = int((M_image * N_image) / (p * p))
+    # test2(generate_seed())
 
-    # list_x1,list_x2,list_x3,list_x4,list_x5,list_x6,list_x7,list_x8 = generate(num+1500)
-
-    # x1 = np.array(list_x1)
-    # x2 = np.array(list_x2)
-    # x3 = np.array(list_x3)
-    # x4 = np.array(list_x4)
-    # x5 = np.array(list_x5)
-    # x6 = np.array(list_x6)
-    # x7 = np.array(list_x7)
-    # x8 = np.array(list_x8)
+    cnt = 0
+    while True:
+        cnt += 1
+        print("\n********** Test Round {} **********".format(cnt))
+        flag = encrypt_and_decrypt(get_plain_img_path(), get_cipher_img_path(), get_decrypted_img_path())
+        if flag:
+            break
 
 
-    x_lists = generate(num + 1500)
-    x_arrays = [np.array(lst) for lst in x_lists]
 
-    #test(encrypath, x1, x2, x3, x4,x5,x6,x7,x8)
-    test2(x_arrays)
+    # plot_rgb_histogram(get_plain_img_path())
+    # plot_rgb_histogram(get_cipher_img_path())
 
 
     # generate_dis_pic()
 
-    # image_path = get_encrypted_img_path()
-    # entropy = calculate_entropy(image_path)
+ 
+    # entropy = calculate_entropy(get_cipher_img_path())
     # print(entropy)
-
+ 
 
     # image_paths = [
-    #     'D:\\pythonmain\\opencv\\encryanddecry\\code\\chaos_apl\\LenaRGB.bmp',
-    #     'D:\\pythonmain\\opencv\\encryanddecry\\code\\chaos_apl\\test.png'
+    #     get_plain_img_path(),
+    #     get_cipher_img_path()
     # ]
-    
     # for path in image_paths:
     #     process_and_visualize(path)
 
