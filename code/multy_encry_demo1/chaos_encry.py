@@ -105,8 +105,7 @@ def split_into_rgb_channels(image):
     return red, green, blue
 
 
-def decompose_matrix(iname):
-    image = cv2.imread(iname)
+def decompose_matrix(image: np.ndarray):
     blue, green, red = split_into_rgb_channels(image)
     for values, channel in zip((red, green, blue), (2, 1, 0)):
         img = np.zeros((values.shape[0], values.shape[1]), dtype=np.uint8)
@@ -309,8 +308,7 @@ def dna_to_binary(dna_blocks, db, coding_rules):
     return binary_blocks
 
 
-def recover_image(b, g, r, iname, path):
-    img = cv2.imread(iname)
+def recover_image(b, g, r, img: np.ndarray, path):
     img[:, :, 2] = r
     img[:, :, 1] = g
     img[:, :, 0] = b
@@ -345,33 +343,15 @@ def map_to_integer(value):
     return round(value)  # 如果不在任何区间内，默认四舍五入
 
 
-
-def encrypt_image(seed, source_path, dest_path):
-    """
-    seed: 种子
-    source_path: 原图路径 (Input)
-    dest_path: 加密后的输出路径 (Output)
-    Return: key (密码)
-    """
-    pass
-    # ... code ...
-    # return key
-
-def decrypt_image(key, source_path, dest_path):
-    """
-    key: 密码
-    source_path: 加密过的图片路径 (Input)
-    dest_path: 解密后的输出路径 (Output)
-    """
-    pass
-    # ... code ...
-
-
-def encrypt(seed, plain_path, cipher_path):
+def encrypt(seed: tuple, plain_path: str, cipher_path: str)-> tuple:
     x1, x2, x3, x4, x5, x6, x7, x8 = seed
     # print(x1.flat[:20])
     # print(x5.flat[:20])
-    blue, green, red = decompose_matrix(plain_path)  # 生成rgb M,N 1024, 1280
+    plain_img = cv2.imread(plain_path)
+    if plain_img is None:
+        raise FileNotFoundError(f"Unable to load image at {plain_path}")
+    
+    blue, green, red = decompose_matrix(plain_img)  # 生成rgb M,N 1024, 1280
 
 
     i1 = np.sum(red)
@@ -479,7 +459,7 @@ def encrypt(seed, plain_path, cipher_path):
     I2_prime = reshape_blocks(dec_sequences_I2, p)
     I3_prime = reshape_blocks(dec_sequences_I3, p)
 
-    recover_image(I1_prime, I2_prime, I3_prime, plain_path, cipher_path)
+    recover_image(I1_prime, I2_prime, I3_prime, plain_img, cipher_path)
 
     dec_seed = (x5, x6, x7, x8)
     dec_sequences = (dec_sequences_I1, dec_sequences_I2, dec_sequences_I3)
@@ -487,7 +467,7 @@ def encrypt(seed, plain_path, cipher_path):
     return decry_key
 
 
-def decrypt(decry_key, cipher_path, decrypted_path):
+def decrypt(decry_key: tuple, cipher_path: str, decrypted_path: str):
 
     dec_seed, dec_sequences, blocks_Q = decry_key
     x5, x6, x7, x8 = dec_seed
@@ -495,6 +475,11 @@ def decrypt(decry_key, cipher_path, decrypted_path):
     I1_prime = reshape_blocks(dec_sequences_I1, p)
     I2_prime = reshape_blocks(dec_sequences_I2, p)
     I3_prime = reshape_blocks(dec_sequences_I3, p)
+    
+    cipher_img = cv2.imread(cipher_path)
+    if cipher_img is None:
+        print(f"Error: Unable to load image at {cipher_path}")
+        return False
 
 
     blocks_I1 = split_into_blocks(I1_prime, p)
@@ -550,7 +535,7 @@ def decrypt(decry_key, cipher_path, decrypted_path):
     I2_prime = reshape_blocks(dncrypted_blocks_I2, p)
     I3_prime = reshape_blocks(dncrypted_blocks_I3, p)
     
-    recover_image(I1_prime, I2_prime, I3_prime, cipher_path, decrypted_path)
+    recover_image(I1_prime, I2_prime, I3_prime, cipher_img, decrypted_path)
 
     # ... code ...
 
@@ -869,9 +854,10 @@ def NPCR(img1, img2):
     return R_npcr, G_npcr, B_npcr
 
 
-def UACI(img1, img2):
-    img1 = cv2.imread(img1)
-    img2 = cv2.imread(img2)
+def UACI(img1_path: str, img2_path: str):
+    """    """
+    img1 = cv2.imread(img1_path)
+    img2 = cv2.imread(img2_path)
     w, h, _ = img1.shape
     # 图像通道拆分
     B1, G1, R1 = cv2.split(img1)
@@ -926,14 +912,30 @@ def check_decryption(plain_path, decrypted_path):
         return False
 
 
-def encrypt_and_decrypt(plain_path=None, cipher_path=None, decrypted_path=None):
-    if plain_path is None or cipher_path is None or decrypted_path is None:
-        # traceback.print_stack()
+def check_decryption_psnr(plain_path: str, decrypted_path: str):
+    plain_img = cv2.imread(plain_path)
+    decrypted_img = cv2.imread(decrypted_path)
+    
+    if plain_img.shape != decrypted_img.shape:
         return False
+
+    # 计算 PSNR
+    psnr_value = cv2.PSNR(plain_img, decrypted_img)
+    
+    # 设定阈值，比如 40dB，意味着差异极小
+    if psnr_value > 40: 
+        return True
+    else:
+        return False
+
+
+def encrypt_and_decrypt_once(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None):
+    if plain_path is None or cipher_path is None or decrypted_path is None:
+        raise ValueError("File paths cannot be None.")
     seed = generate_seed()
     decry_key = encrypt(seed, plain_path, cipher_path)
     decrypt(decry_key, cipher_path, decrypted_path)
-    if check_decryption(plain_path, decrypted_path):
+    if check_decryption_psnr(plain_path, decrypted_path):
         print("Decryption successful: The decrypted image matches the original.")
         return True
     else:
@@ -941,21 +943,36 @@ def encrypt_and_decrypt(plain_path=None, cipher_path=None, decrypted_path=None):
         return False
 
 
-
-if __name__ == "__main__":
-
-
-    # test2(generate_seed())
-
+def encrypt_and_decrypt(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None):
     cnt = 0
     while True:
         cnt += 1
-        print("\n********** Test Round {} **********".format(cnt))
-        flag = encrypt_and_decrypt(get_plain_img_path(), get_cipher_img_path(), get_decrypted_img_path())
+        print("\n********** Round: {} **********".format(cnt))
+        flag = encrypt_and_decrypt_once(plain_path, cipher_path, decrypted_path)
         if flag:
             break
+        elif cnt >= 10:
+            raise Exception("Decryption failed after 10 attempts.")
+            
 
+if __name__ == "__main__":
 
+    # test2(generate_seed())
+
+    # cnt = 0
+    # while True:
+    #     cnt += 1
+    #     print("\n********** Test Round {} **********".format(cnt))
+    #     flag = encrypt_and_decrypt(get_plain_img_path(), get_cipher_img_path(), get_decrypted_img_path())
+    #     if flag:
+    #         break
+
+    try:
+        encrypt_and_decrypt(get_plain_img_path(), get_cipher_img_path(), get_decrypted_img_path())
+    except Exception as e:
+        print("An error occurred during encryption/decryption:", str(e))
+
+    pass
 
     # plot_rgb_histogram(get_plain_img_path())
     # plot_rgb_histogram(get_cipher_img_path())
