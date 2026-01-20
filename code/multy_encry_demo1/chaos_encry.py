@@ -83,7 +83,7 @@ class KalmanFilter1D:
 
 
 def get_plain_img_path():
-    path = "img/d01.png"
+    path = "data1/image_s0002_i0001.jpg"
     return path
 
 
@@ -899,7 +899,7 @@ def generate_seed():
     return x1, x2, x3, x4, x5, x6, x7, x8
 
 
-def check_decryption(plain_path, decrypted_path):
+def check_decryption_pixel(plain_path, decrypted_path):
     plain_img = cv2.imread(plain_path)
     decrypted_img = cv2.imread(decrypted_path)
     if plain_img.shape != decrypted_img.shape:
@@ -937,6 +937,8 @@ def encrypt_and_decrypt_once(plain_path: str = None, cipher_path: str = None, de
     decrypt(decry_key, cipher_path, decrypted_path)
     if check_decryption_psnr(plain_path, decrypted_path):
         print("Decryption successful: The decrypted image matches the original.")
+        if not check_decryption_pixel(plain_path, decrypted_path):
+            raise Exception("Decryption verification failed: Pixel values do not match exactly.")
         return True
     else:
         print("Decryption failed: The decrypted image does not match the original.")

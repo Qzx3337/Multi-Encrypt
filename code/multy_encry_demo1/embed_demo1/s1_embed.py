@@ -16,7 +16,19 @@ ALPHA = 30
 
 def embed_text_dct(src_img_path, txt_path, embedded_img_path):
     """
-    使用DCT频域盲水印将txt_path中的文本嵌入src_img_path图像，结果保存到embedded_img_path。
+    使用DCT频域盲水印方法，将文本嵌入图像中，结果图像保存到指定路径。
+
+    Args:
+        src_img_path (str): 原始图像路径（PNG格式）
+        txt_path (str): 待嵌入文本文件路径
+        embedded_img_path (str): 嵌入后图像保存路径（PNG格式）
+
+    Returns:
+        bool: 嵌入成功返回True
+
+    备注:
+        - 仅在亮度通道嵌入文本，保持色彩信息不变
+        - 使用简单的量化索引奇偶性调整中频DCT系数实现盲水印
     """
     # 读取文本并截断
     with open(txt_path, 'r', encoding='utf-8', errors='ignore') as f:
