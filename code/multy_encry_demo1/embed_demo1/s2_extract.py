@@ -11,6 +11,7 @@ END_MARKER = '<END>'
 MARKER_REPEATS = 3
 BLOCK_SIZE = 8
 ALPHA = 30
+# ALPHA = 20
 
 def extract_text_dct(embedded_img_path, output_txt_path, output_img_path):
     """
@@ -124,3 +125,4 @@ if __name__ == '__main__':
         main()
     except ImportError:
         print('Requirements: pip install pillow numpy opencv-python')
+        

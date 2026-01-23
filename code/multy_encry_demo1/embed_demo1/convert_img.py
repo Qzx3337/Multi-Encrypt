@@ -1,29 +1,29 @@
+from pathlib import Path
 from PIL import Image
-import os
 
-def convert_bmp_to_png(source_path, target_path=None):
-    """
-    将 BMP 图片转换为 PNG 格式
-    """
-    try:
-        # 如果未指定目标路径，则在同一目录下更改后缀名
-        if target_path is None:
-            target_path = os.path.splitext(source_path)[0] + ".png"
-
-        # 打开并保存
-        with Image.open(source_path) as img:
-            img.save(target_path, "PNG")
-            
-        print(f"成功: {source_path} -> {target_path}")
-    except Exception as e:
-        print(f"转换失败: {e}")
-
-# 使用示例
-if __name__ == "__main__":
-    # 替换为你的文件名
-    file_name = "source_files/LenaRGB.bmp"
+def convert_jpg_to_png_simple(data_dir='data'):
+    """简化的转换函数"""
+    data_path = Path(data_dir)
     
-    if os.path.exists(file_name):
-        convert_bmp_to_png(file_name)
-    else:
-        print(f"未找到文件: {file_name}")
+    if not data_path.exists():
+        print(f"目录 '{data_dir}' 不存在！")
+        return
+    
+    for jpg_file in data_path.rglob('*'):
+        if jpg_file.suffix.lower() in ['.jpg', '.jpeg']:
+            png_file = jpg_file.with_suffix('.png')
+            
+            if png_file.exists():
+                print(f"跳过: {jpg_file.name} (PNG已存在)")
+                continue
+            
+            try:
+                with Image.open(jpg_file) as img:
+                    # 转换为PNG
+                    img.save(png_file, 'PNG')
+                    print(f"转换: {jpg_file.name} -> {png_file.name}")
+            except Exception as e:
+                print(f"错误: 无法转换 {jpg_file.name} - {e}")
+
+if __name__ == "__main__":
+    convert_jpg_to_png_simple('source_files')

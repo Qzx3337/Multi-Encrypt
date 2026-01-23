@@ -13,6 +13,8 @@ MAX_CHARS_DCT = 64  # 频域嵌入建议阈值
 END_MARKER = '<END>'
 MARKER_REPEATS = 3
 ALPHA = 30
+# ALPHA = 20
+
 
 def embed_text_dct(src_img_path, txt_path, embedded_img_path):
     """
