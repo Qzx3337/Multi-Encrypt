@@ -43,8 +43,8 @@ def calculate_limits(img, is_log):
         mu = np.mean(all_data)
         sigma = np.std(all_data)
         
-        y_max = mu + 1 * sigma
-        y_min = mu - 1 * sigma
+        y_max = mu + 3 * sigma
+        y_min = mu - 3 * sigma
         
         # 线性坐标下，像素数量不可能为负，截断到 0
         if y_min < 0:
@@ -182,19 +182,20 @@ def process_paired_folders(plain_dir, cipher_dir,
 if __name__ == "__main__":
     # --- 配置路径 ---
     
-    plain_dir = "pictures/plain_img"
-    cipher_dir = "pictures/cipher_img"
+    plain_dir = "pictures/data01/plain_img"
+    cipher_dir = "pictures/data01/cipher_img"
     
     # 定义输出路径字典
     plain_out = {
-        "linear": "pictures/plain_hist",
-        "log": "pictures/plain_hist_log"
+        "linear": "pictures/data01/plain_hist",
+        "log": "pictures/data01/plain_hist_log"
     }
     
     cipher_out = {
-        "linear": "pictures/cipher_hist",
-        "log": "pictures/cipher_hist_log"
+        "linear": "pictures/data01/cipher_hist",
+        "log": "pictures/data01/cipher_hist_log"
     }
 
     # 执行成对处理
     process_paired_folders(plain_dir, cipher_dir, plain_out, cipher_out)
+

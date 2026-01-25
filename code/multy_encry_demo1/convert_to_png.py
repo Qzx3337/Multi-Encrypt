@@ -11,7 +11,7 @@ def batch_convert_jpg_to_png(root_dir, delete_source=False):
     for root, dirs, files in os.walk(root_dir):
         for file in files:
             # 检查后缀名 (不区分大小写)
-            if file.lower().endswith(('.jpg', '.jpeg')):
+            if file.lower().endswith(('.jpg', '.jpeg', '.bmp')):
                 jpg_files.append(os.path.join(root, file))
     
     total_files = len(jpg_files)
@@ -49,7 +49,7 @@ def batch_convert_jpg_to_png(root_dir, delete_source=False):
 
 if __name__ == "__main__":
     # 请修改这里的路径
-    data_path = "./CT_data" 
+    data_path = "./pictures" 
     
     # 建议先设为 False 运行一次，确认 PNG 生成无误后，再改为 True 删除 JPG
-    batch_convert_jpg_to_png(data_path, delete_source=True)
+    batch_convert_jpg_to_png(data_path, delete_source=False)
