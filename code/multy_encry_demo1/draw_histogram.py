@@ -1,106 +1,200 @@
 import os
 import cv2
+import numpy as np  # 【修改点】：引入 numpy 进行统计计算
 import matplotlib.pyplot as plt
 
-
-def draw_histogram_for_file(image_path, save_path):
+def calculate_limits(img, is_log):
     """
-    读取单个图像文件，计算其RGB直方图并保存统计图。
-    修改点：纵坐标使用对数刻度，且填充曲线下面积。
+    【新增功能】：计算图像直方图数据的 mu +/- 5*sigma 范围。
     """
-    img = cv2.imread(image_path)
+    # 1. 计算所有通道的直方图数据
+    hist_data = []
+    for i in range(3):
+        hist = cv2.calcHist([img], [i], None, [256], [0, 256])
+        hist_data.append(hist.flatten())
     
-    if img is None:
-        print(f"Error: Unable to open image {image_path}")
-        return
+    # 合并三个通道的数据为一个大数组进行统计
+    all_data = np.concatenate(hist_data)
+    
+    if is_log:
+        # --- Log 模式统计逻辑 ---
+        # 避免 log(0)，加一个极小值 epsilon (例如 1e-6 或 1)
+        # 这里加 1 是因为像素数通常是整数，log(1)=0，不会产生负无穷
+        log_data = np.log(all_data + 1)
+        
+        mu = np.mean(log_data)
+        sigma = np.std(log_data)
+        
+        # 计算 Log 域下的上下限
+        upper_log = mu + 5 * sigma
+        lower_log = mu - 5 * sigma
+        
+        # 【关键】：因为 plt.yscale('log') 还是使用线性数值标记刻度，
+        # 所以我们需要把 log 域的统计值还原回线性域 (exp)
+        y_max = np.exp(upper_log)
+        y_min = np.exp(lower_log)
+        
+        # Log 坐标下，下限不能小于等于 0，设置一个安全下限（如 1）
+        if y_min < 1: 
+            y_min = 1
+            
+    else:
+        # --- 线性模式统计逻辑 ---
+        mu = np.mean(all_data)
+        sigma = np.std(all_data)
+        
+        y_max = mu + 1 * sigma
+        y_min = mu - 1 * sigma
+        
+        # 线性坐标下，像素数量不可能为负，截断到 0
+        if y_min < 0:
+            y_min = 0
+            
+    return y_min, y_max
 
+def plot_and_save_histogram(img, save_path, log_scale=False, y_limits=None):
+    """
+    绘制并保存直方图。
+    【修改点】：增加了 y_limits 参数用于固定纵坐标范围。
+    """
     plt.figure()
-    # plt.title("RGB Histogram (Log Scale)")
-    plt.title("RGB Histogram")
+    
+    if log_scale:
+        plt.title("RGB Histogram (Log Scale)")
+        plt.yscale('log')
+    else:
+        plt.title("RGB Histogram (Linear Scale)")
+
     plt.xlabel("Bins")
     plt.ylabel("# of Pixels")
+    plt.xlim([0, 256])
     
-    # 【修改点 1】：设置纵坐标为对数坐标
-    # 这句话会让 Y 轴的刻度变成 10^0, 10^1, 10^2... 
-    # 对于加密后的均匀分布或者差异巨大的像素分布，对数坐标能看得更清楚。
-    # plt.yscale('log') 
+    # 【修改点】：应用计算好的纵坐标范围
+    if y_limits is not None:
+        plt.ylim(y_limits)
 
     colors = ('b', 'g', 'r')
     for i, color in enumerate(colors):
-        # 计算直方图
         hist = cv2.calcHist([img], [i], None, [256], [0, 256])
-        
-        # 将 opencv 计算出的 (256, 1) 数组展平为一维，方便绘图
         hist_data = hist.flatten()
-        
-        # 绘制曲线 (保留轮廓线，看起来更清晰)
         plt.plot(hist_data, color=color, linewidth=1)
-        
-        # 【修改点 2】：填充线下颜色
-        # range(256): 指定 x 轴范围是 0 到 255
-        # hist_data: 指定 y 轴数据
-        # alpha=0.5: 设置透明度为 0.5，这样红绿蓝重叠的部分也能看清，而不是互相覆盖
+        # 调整透明度为 0.1 避免遮挡
         plt.fill_between(range(256), hist_data, color=color, alpha=0.1)
-
-        plt.xlim([0, 256])
 
     plt.savefig(save_path)
     plt.close()
 
-
-def process_histogram_folder(source_dir, output_dir):
+def process_paired_folders(plain_dir, cipher_dir, 
+                           plain_out_dict, cipher_out_dict):
     """
-    遍历 source_dir 下的所有图片，绘制直方图并保存到 output_dir。
+    【核心修改】：成对处理文件夹。
+    同时读取 Plain 和 Cipher 图片，计算共同的纵坐标范围，然后绘图。
     """
-    # 1. 确保输出目录存在
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        print(f"Created directory: {output_dir}")
+    # 1. 创建所有输出目录
+    for d in list(plain_out_dict.values()) + list(cipher_out_dict.values()):
+        if d and not os.path.exists(d):
+            os.makedirs(d)
 
-    # 2. 遍历源文件夹
-    files = os.listdir(source_dir)
+    # 2. 以 Plain 文件夹的文件列表为基准
+    if not os.path.exists(plain_dir):
+        print(f"Error: Source directory {plain_dir} does not exist.")
+        return
+
+    files = os.listdir(plain_dir)
     count = 0
     
-    print(f"Processing histograms for folder: {source_dir} ...")
+    print(f"Processing paired histograms for: {plain_dir} AND {cipher_dir} ...")
     
     for filename in files:
-        # 简单过滤图片文件，可根据需要增加 png 等格式
         if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
-            input_path = os.path.join(source_dir, filename)
             
-            # 为了区分，输出的文件名可以加个 _hist 后缀，或者保持原名（这里保持原名，但扩展名可能需要注意）
-            # 这里直接使用原文件名，保存为 png 格式（matplotlib 默认支持）
+            # --- 步骤 A: 读取成对的图片 ---
+            plain_path = os.path.join(plain_dir, filename)
+            cipher_path = os.path.join(cipher_dir, filename)
+            
+            img_plain = cv2.imread(plain_path)
+            
+            # 如果加密文件夹里没有对应的图，或者读取失败，则跳过对比逻辑（或者你可以选择单独处理）
+            if not os.path.exists(cipher_path):
+                print(f"Warning: Cipher counterpart not found for {filename}")
+                continue
+                
+            img_cipher = cv2.imread(cipher_path)
+
+            if img_plain is None or img_cipher is None:
+                continue
+
             output_filename = f"{os.path.splitext(filename)[0]}_hist.png"
-            output_path = os.path.join(output_dir, output_filename)
             
             try:
-                draw_histogram_for_file(input_path, output_path)
+                # --- 步骤 B: 确定 线性坐标 的共同范围 ---
+                # 分别计算两个图的建议范围 (mu +/- 5sigma)
+                p_lin_min, p_lin_max = calculate_limits(img_plain, is_log=False)
+                c_lin_min, c_lin_max = calculate_limits(img_cipher, is_log=False)
+                
+                # 【核心逻辑】：取并集。
+                # 为了对比，Y轴上限必须能容纳两者中最高的那个上限。
+                # 通常 Plain 图会有很高的峰值，而 Cipher 图很平。如果不统一，Cipher 图会被放大看噪声。
+                # 统一后，Cipher 图应该在下方显示为一条平缓的线。
+                shared_linear_max = max(p_lin_max, c_lin_max)
+                shared_linear_min = min(p_lin_min, c_lin_min) # 通常是 0
+                linear_limits = [shared_linear_min, shared_linear_max]
+
+                # --- 步骤 C: 确定 Log 坐标 的共同范围 ---
+                p_log_min, p_log_max = calculate_limits(img_plain, is_log=True)
+                c_log_min, c_log_max = calculate_limits(img_cipher, is_log=True)
+                
+                shared_log_max = max(p_log_max, c_log_max)
+                shared_log_min = min(p_log_min, c_log_min)
+                log_limits = [shared_log_min, shared_log_max]
+
+                # --- 步骤 D: 绘图并保存 ---
+                
+                # 1. Plain Image Plots
+                if plain_out_dict.get("linear"):
+                    save_path = os.path.join(plain_out_dict["linear"], output_filename)
+                    plot_and_save_histogram(img_plain, save_path, False, linear_limits)
+                
+                if plain_out_dict.get("log"):
+                    save_path = os.path.join(plain_out_dict["log"], output_filename)
+                    plot_and_save_histogram(img_plain, save_path, True, log_limits)
+
+                # 2. Cipher Image Plots (使用相同的 limits)
+                if cipher_out_dict.get("linear"):
+                    save_path = os.path.join(cipher_out_dict["linear"], output_filename)
+                    plot_and_save_histogram(img_cipher, save_path, False, linear_limits)
+                
+                if cipher_out_dict.get("log"):
+                    save_path = os.path.join(cipher_out_dict["log"], output_filename)
+                    plot_and_save_histogram(img_cipher, save_path, True, log_limits)
+                
                 count += 1
+                if count % 10 == 0:
+                    print(f"Processed pairs: {count}...")
+
             except Exception as e:
                 print(f"Failed to process {filename}: {e}")
+                import traceback
+                traceback.print_exc()
 
-    print(f"Finished. Generated {count} histograms in '{output_dir}'.\n")
+    print(f"Finished. Processed {count} image pairs.\n")
 
 if __name__ == "__main__":
-    # 定义文件夹路径
+    # --- 配置路径 ---
     
-    # 1. 原始图片及其直方图存放目录
-    plain_img_dir = "pictures/plain_img"
-    plain_hist_dir = "pictures/plain_hist"
+    plain_dir = "pictures/plain_img"
+    cipher_dir = "pictures/cipher_img"
     
-    # 2. 加密图片及其直方图存放目录
-    cipher_img_dir = "pictures/cipher_img"
-    cipher_hist_dir = "pictures/cipher_hist"
+    # 定义输出路径字典
+    plain_out = {
+        "linear": "pictures/plain_hist",
+        "log": "pictures/plain_hist_log"
+    }
+    
+    cipher_out = {
+        "linear": "pictures/cipher_hist",
+        "log": "pictures/cipher_hist_log"
+    }
 
-    # 执行批量绘图：处理未加密图片
-    if os.path.exists(plain_img_dir):
-        process_histogram_folder(plain_img_dir, plain_hist_dir)
-    else:
-        print(f"Warning: Directory '{plain_img_dir}' does not exist.")
-
-    # 执行批量绘图：处理加密后图片
-    if os.path.exists(cipher_img_dir):
-        process_histogram_folder(cipher_img_dir, cipher_hist_dir)
-    else:
-        print(f"Warning: Directory '{cipher_img_dir}' does not exist.")
-
+    # 执行成对处理
+    process_paired_folders(plain_dir, cipher_dir, plain_out, cipher_out)
