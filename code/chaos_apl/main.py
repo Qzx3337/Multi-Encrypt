@@ -81,8 +81,8 @@ class KalmanFilter1D:
 
 
 def get_original_img_path():
-    # path = "img/LenaRGB.bmp"
-    path = "img/d01.png"
+    path = "yuzhou.png"
+    # path = "img/d01.png"
     return path
 
 

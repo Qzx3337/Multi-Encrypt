@@ -1,5 +1,5 @@
 
-import chaos_encry
+import code.multy_encry_demo1.chaos as chaos
 import embed_demo1
 
 

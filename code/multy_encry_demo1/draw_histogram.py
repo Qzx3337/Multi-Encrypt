@@ -34,13 +34,13 @@ def draw_histogram_for_file(image_path, save_path):
         hist_data = hist.flatten()
         
         # 绘制曲线 (保留轮廓线，看起来更清晰)
-        # plt.plot(hist_data, color=color, linewidth=0.2)
+        plt.plot(hist_data, color=color, linewidth=1)
         
         # 【修改点 2】：填充线下颜色
         # range(256): 指定 x 轴范围是 0 到 255
         # hist_data: 指定 y 轴数据
         # alpha=0.5: 设置透明度为 0.5，这样红绿蓝重叠的部分也能看清，而不是互相覆盖
-        plt.fill_between(range(256), hist_data, color=color, alpha=0.9)
+        plt.fill_between(range(256), hist_data, color=color, alpha=0.1)
 
         plt.xlim([0, 256])
 
@@ -85,12 +85,12 @@ if __name__ == "__main__":
     # 定义文件夹路径
     
     # 1. 原始图片及其直方图存放目录
-    plain_img_dir = "data1"
-    plain_hist_dir = "plain_hist"
+    plain_img_dir = "pictures/plain_img"
+    plain_hist_dir = "pictures/plain_hist"
     
     # 2. 加密图片及其直方图存放目录
-    cipher_img_dir = "cipher_img"
-    cipher_hist_dir = "cipher_hist"
+    cipher_img_dir = "pictures/cipher_img"
+    cipher_hist_dir = "pictures/cipher_hist"
 
     # 执行批量绘图：处理未加密图片
     if os.path.exists(plain_img_dir):

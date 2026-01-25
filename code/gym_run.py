@@ -1,12 +1,17 @@
-#import the necessary libraries, the environment, and RL policy
+# import the necessary libraries, the environment, and RL policy
 import math
 import os
 import time
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+from mpl_toolkits.mplot3d import Axes3D
 import gym
-import sys
-# sys.path.append('/tmp/pycharm_project_60/code/gym-lorenz')  # 或者确切的安装路径（在服务器上运行时候）
+import csv
 import gym_lorenz
 import numpy
+
+import matplotlib
+# 必须在 import pyplot 之前设置 backend，'Agg' 是用于生成图像文件的非交互后端
+matplotlib.use('Agg')
 from matplotlib import font_manager
 from matplotlib.font_manager import FontProperties
 from matplotlib.ticker import FuncFormatter
@@ -21,14 +26,98 @@ from stable_baselines3 import DDPG
 from stable_baselines3 import A2C
 from stable_baselines3.ddpg.policies import MlpPolicy
 from stable_baselines3 import SAC
-from stable_baselines3 import  PPO
+from stable_baselines3 import PPO
 from stable_baselines3.ppo import MlpPolicy
 import pandas as pd
-
 
 import torch as th
 import torch.cuda
 import networkx as nx
+from stable_baselines3.common.callbacks import BaseCallback
+
+
+# 添加自定义回调类 - 不依赖Monitor
+class RewardCallback(BaseCallback):
+    """
+    自定义回调函数，用于记录训练过程中的奖励
+    """
+
+    def __init__(self, check_freq=1000, verbose=0):
+        super(RewardCallback, self).__init__(verbose)
+        self.check_freq = check_freq
+        self.episode_rewards = []
+        self.episode_lengths = []
+        self.timesteps = []
+        self.current_episode_reward = 0
+        self.current_episode_length = 0
+
+    def _on_step(self) -> bool:
+        # 累积当前步的奖励
+        self.current_episode_reward += self.locals['rewards'][0]
+        self.current_episode_length += 1
+
+        # 检查episode是否结束
+        if self.locals['dones'][0]:
+            # 记录episode信息
+            self.episode_rewards.append(self.current_episode_reward)
+            self.episode_lengths.append(self.current_episode_length)
+            self.timesteps.append(self.num_timesteps)
+
+            if self.verbose > 0:
+                print(
+                    f"Episode {len(self.episode_rewards)}: reward={self.current_episode_reward:.2f}, length={self.current_episode_length}")
+
+            # 重置计数器
+            self.current_episode_reward = 0
+            self.current_episode_length = 0
+
+        return True
+
+    def get_data(self):
+        """返回收集的数据"""
+        return self.timesteps, self.episode_rewards, self.episode_lengths
+
+
+def plot_rewards(timesteps, rewards, save_path=None):
+    """
+    绘制训练奖励曲线
+
+    参数:
+    - timesteps: 时间步列表
+    - rewards: 奖励列表
+    - save_path: 保存路径，None则显示
+    """
+    # 设置字体
+    plt.rcParams['font.size'] = 14
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.style'] = 'normal'
+
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+
+    # 绘制原始奖励
+    ax.plot(timesteps, rewards, alpha=0.3, color='blue', label='Episode Reward')
+
+    # 计算并绘制移动平均
+    if len(rewards) > 10:
+        window_size = min(50, len(rewards) // 10)
+        moving_avg = np.convolve(rewards, np.ones(window_size) / window_size, mode='valid')
+        moving_avg_steps = timesteps[window_size - 1:]
+        ax.plot(moving_avg_steps, moving_avg, linewidth=2, color='red',
+                label=f'Moving Average (window={window_size})')
+
+    ax.set_xlabel('Training Steps')
+    ax.set_ylabel('Episode Reward')
+    ax.set_title('Training Reward Curve')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"奖励曲线已保存到: {save_path}")
+    else:
+        plt.show()
 
 
 class CustomAttentionFeaturesExtractor(BaseFeaturesExtractor):
@@ -62,108 +151,117 @@ class CustomAttentionFeaturesExtractor(BaseFeaturesExtractor):
 
 
 def function(save_name):
-    # load the environment
-    # print(th.cuda.is_available())
-    # print(torch.cuda.get_device_name(0))
-    env = gym.make('lorenz_transient-v0')  # 注册环境
-    env = DummyVecEnv([lambda: env])  # The algorithms require a vectorized environment to run
 
-    policy_kwargs = {
-        "features_extractor_class": CustomAttentionFeaturesExtractor,
-        "features_extractor_kwargs": {"features_dim": 64},  # 注意与自定义特征提取器中的features_dim一致
-    }
+    env = gym.make('lorenz_transient-v0')
+    env = DummyVecEnv([lambda: env])
 
-    # The noise objects for DDPG
+    reward_callback = RewardCallback(verbose=1)
     n_actions = env.action_space.shape[-1]
 
-    policy_kwargs = dict(net_arch=[dict(pi=[128, 128], vf=[128, 128])])
+    policy_kwargs = dict(net_arch=[dict(pi=[256, 256], vf=[256, 256])])
+    model = PPO("MlpPolicy", env, verbose=1,
+                tensorboard_log="./lorenztensorboard2/",policy_kwargs=policy_kwargs,
+                learning_rate=5e-5)
 
-    # setup the RL policy and environment. Couple with tensorboard.
-    # model = DDPG("MlpPolicy", env, verbose=1,tensorboard_log="./lorenztensorboard2/")
-    model = PPO("MlpPolicy", env
-                , verbose=1, tensorboard_log="./lorenztensorboard2/")
-
-    # start the training
-    # 训练步数
-    model.learn(total_timesteps=1280000)
-    # save the trained model
+    print("开始训练...")
+    # 开始训练，传入回调
+    model.learn(total_timesteps=1000000, callback=reward_callback)
+    # 保存模型
     model.save(save_name)
+    print("模型已保存")
+
+    # 获取并绘制奖励曲线
+    timesteps, rewards, lengths = reward_callback.get_data()
+    print(f"\n训练统计:")
+    print(f"- 总训练步数: {timesteps[-1] if timesteps else 0}")
+    print(f"- 完成的 episodes: {len(rewards)}")
+
+    if len(rewards) > 0:
+        print(f"- 平均奖励: {np.mean(rewards):.2f} ± {np.std(rewards):.2f}")
+        print(f"- 最大奖励: {np.max(rewards):.2f}")
+        print(f"- 最小奖励: {np.min(rewards):.2f}")
+        if len(rewards) >= 100:
+            print(f"- 最后100个episodes平均奖励: {np.mean(rewards[-100:]):.2f}")
+
+        # 绘制并保存奖励曲线
+        plot_rewards(timesteps, rewards, save_path=f'training_plot/{save_name}_reward_curve.png')
+        print(f"奖励曲线已保存为: {save_name}_reward_curve.png")
+    else:
+        print("警告：未收集到奖励数据，请检查环境配置")
+
+    return reward_callback
+
 
 def testPPO1(model_name0):
-    env = gym.make('lorenz_transient-v0')
+    # 1. 加载环境和模型
+    env = gym.make('lorenz_transient-v0')  # 确保环境ID正确
     model = PPO.load(model_name0, env, verbose=1)
-    print(model.policy)
+
+    # 简单评估
     mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10)
-    print(f"Mean reward: {mean_reward/1000:.2f} ± {std_reward/1000:.2f}")
+    print(f"Mean reward: {mean_reward / 1000:.2f} ± {std_reward / 1000:.2f}")
 
-    # 创建并保存每种观测值对应的所有线条数据
-    all_list_obs1 = [[] for _ in range(10)]
-    all_list_obs2 = [[] for _ in range(10)]
-    all_list_obs3 = [[] for _ in range(10)]
-    all_list_act1 = [[] for _ in range(10)]
-    all_list_act2 = [[] for _ in range(10)]
+    # 2. 初始化数据存储列表 (扩充为 4个状态 + 3个控制)
+    all_list_obs1 = [[] for _ in range(10)]  # x error
+    all_list_obs2 = [[] for _ in range(10)]  # y error
+    all_list_obs3 = [[] for _ in range(10)]  # z error
+    all_list_obs4 = [[] for _ in range(10)]  # w error (新增)
 
-    list_inital=[]
-    # list_inital = [[14.3, 19.3, -29.9], [-17.7, -0.1, 15.2]
-    #     , [29.4, 28.6, 7.1], [19.3, 24.1, -10.3],
-    #                [-4.8, 15.5, -2.0], [14.1, 2.4, -16.5],
-    #                [4.4, 0.2, 29.5], [12.6, 27.7, -10.8],
-    #                [11.6, -4.8, 18.9], [13.5, 26.9, -5.9]]
+    all_list_act1 = [[] for _ in range(10)]  # u1
+    all_list_act2 = [[] for _ in range(10)]  # u2
+    all_list_act3 = [[] for _ in range(10)]  # u3 (新增)
 
+    list_inital = []  # 用于存储每个Episode的初始状态用于图例
+
+    # 3. 开始 10 次测试循环
     for j in range(10):
         obs = env.reset()
-        print(obs)
-        # dxdt_controlled = -list_inital[j][0] + list_inital[j][1] * list_inital[j][2]
-        # dydt_controlled = -list_inital[j][1] - list_inital[j][0] * list_inital[j][2] + 20 * list_inital[j][2]
-        # dzdt_controlled = 5.46 * (list_inital[j][1] - list_inital[j][2])
-        # obs = ([list_inital[j][0], list_inital[j][1], list_inital[j][2], dxdt_controlled, dydt_controlled, dzdt_controlled])
-        # print(obs)
-        list_obs1, list_obs2, list_obs3 = [], [], []
-        list_act1, list_act2 = [], []
 
+        list_obs1, list_obs2, list_obs3, list_obs4 = [], [], [], []
+        list_act1, list_act2, list_act3 = [], [], []
 
-
-        for i in range(200):
+        for i in range(2000):  # 运行 200 步
             action, _states = model.predict(obs)
             obs, rewards, dones, info = env.step(action)
-            list_obs1.append(obs[0])
-            list_obs2.append(obs[1])
-            list_obs3.append(obs[2])
-            list_act1.append(action[0])
-            list_act2.append(action[1])
-            if i==0:
-                list_inital.append([obs[0],obs[1],obs[2],action[0],action[1]])
+
+            # 记录 4 个维度的误差
+            list_obs1.append(obs[0])  # x
+            list_obs2.append(obs[1])  # y
+            list_obs3.append(obs[2])  # z
+            list_obs4.append(obs[3])  # w (新增)
+
+            # 记录 3 个维度的控制力
 
 
-        # 将每次运行的结果添加到总的列表中
+            # 记录初始值 (只在第一步记录)
+            if i == 0:
+                # 存储结构: [x0, y0, z0, w0, u1_0, u2_0, u3_0]
+                list_inital.append([obs[0], obs[1], obs[2], obs[3], action[0], action[1], action[2]])
+
+
+            # 将单次测试的数据存入总表
         all_list_obs1[j] = list_obs1
         all_list_obs2[j] = list_obs2
         all_list_obs3[j] = list_obs3
+        all_list_obs4[j] = list_obs4
+
         all_list_act1[j] = list_act1
         all_list_act2[j] = list_act2
+        all_list_act3[j] = list_act3
 
+    # 4. 绘图设置
+    plt.rcParams['font.size'] = 18
+    plt.rcParams['font.family'] = 'Times New Roman'
+    plt.rcParams['font.style'] = 'normal'
 
-    # 设置全局字体大小
-    plt.rcParams['font.size'] = 18  # 设置默认字体大小为14
-    figsize_width = 24
-    figsize_height = 6
-    # 指定字体文件的完整路径
-    font_path = '/usr/share/fonts/truetype/times/times.ttf'
-    font_manager.fontManager.addfont('/usr/share/fonts/truetype/times/times.ttf')
+    # 5. 绘图循环：现在需要画 7 张图 (0-3是误差, 4-6是控制力)
+    # k=0: x, k=1: y, k=2: z, k=3: w
+    # k=4: u1, k=5: u2, k=6: u3
+    for k in range(4):
+        fig, axs = plt.subplots(1, 1, figsize=(15, 6))
 
-    # 创建一个FontProperties对象，指向你的字体文件
-    prop = FontProperties(fname=font_path)
-
-    # 更新rcParams以使用指定的字体
-    plt.rcParams['font.family'] = prop.get_name()
-    print(prop.get_name())
-
-    # plt.rcParams['font.family'] = 'Times New Roman'#(windows下使用)
-    # plt.rcParams['font.style'] = 'normal'
-    # 分别为每种观测值绘制10条线
-    for k in range(5):  # 对应obs[0], obs[1], obs[2]
-        fig, axs = plt.subplots(1, 1, figsize=(15, 6))  # 每次只创建一张图
-        for j in range(10):
+        for j in range(10):  # 遍历 10 次测试
+            # 数据选择逻辑
             if k == 0:
                 data = all_list_obs1[j]
             elif k == 1:
@@ -171,69 +269,87 @@ def testPPO1(model_name0):
             elif k == 2:
                 data = all_list_obs3[j]
             elif k == 3:
-                data = all_list_act1[j]
+                data = all_list_obs4[j]  # 新增 w
+
+            # 图例文字与数值缩放逻辑
+            # k <= 3 代表是状态误差 (x, y, z, w)
+            if k <= 3:
+                text = "Error"
+                # 对应 list_inital 的索引 0,1,2,3
+                num = round(list_inital[j][k], 1)
+
+            if k == 2:
+                # 如果是 Z 轴 (k=2)，使用全部 2000 步数据
+                plot_data =data
+                steps = 2000
             else:
-                data = all_list_act2[j]
-            # if k<=2:
-            #     text="Error"
-            #     axs.plot([(i / 100) for i in range(1, len(data) + 1)], data,
-            #              label=f"Test {j + 1}(inital {text}={round(list_inital[j][k], 1)})")
-            # else:
-            #     for i in range(len(data)):
-            #         test_data.append(data[i]*20)
-            #     text="Control Force"
-            #     axs.plot([(i / 100) for i in range(1, len(data) + 1)], test_data, label=f"Test {j + 1}(inital {text}={round(list_inital[j][k]*20,1)})")
-            if k<=2:
-                text="Error"
-                num=round(list_inital[j][k],1)
-            else:
-                num=round(list_inital[j][k]*50,1)
-                text="Control Force"
-            axs.plot([(i / 1000) for i in range(0, len(data))], data, label=f"Test {j + 1}(inital {text}={num})")
-            axs.legend(prop={'size': 15}, loc='upper right')  # 'upper right'位置参数使图例显示在右上角
-        if k==0:
-            #axs.set_title(r"Error in  ")
-            axs.set_ylabel(f"x")
-        elif k==1:
-            #axs.set_title(r"Error in  ")
-            axs.set_ylabel(f"y")
+                # 如果是 X, Y, W (k=0,1,3)，只切片取前 200 步
+                plot_data = data[:200]
+                steps = 200
+
+
+
+            time_axis = [(t / 1000) for t in range(0, len(plot_data))]
+            axs.plot(time_axis, plot_data, label=f"Test {j + 1}(inital {text}={num})")
+
+        axs.legend(prop={'size': 15}, loc='upper right')
+
+        # 设置标签 Titles and Labels
+        if k == 0:
+            axs.set_ylabel(f"Error x")
+        elif k == 1:
+            axs.set_ylabel(f"Error y")
         elif k == 2:
-            #axs.set_title(r"Error in  ")
-            axs.set_ylabel(f"z")
-        elif k==3:
-            #axs.set_title(f"Control Force of x")
-            axs.set_ylabel(f"Error")
-        elif k==4:
-            #axs.set_title(f"Control Force of y")
-            axs.set_ylabel(f"Error")
+            axs.set_ylabel(f"Error z")
+        elif k == 3:
+            axs.set_ylabel(f"Error w")  # 新增
+        elif k == 4:
+            axs.set_ylabel(f"Control u1")  # 修正了之前的 Label 错误
+        elif k == 5:
+            axs.set_ylabel(f"Control u2")
+        elif k == 6:
+            axs.set_ylabel(f"Control u3")  # 新增
+
+
         axs.set_xlabel("Time(s)")
-        # if k<=2:
-        #     axs.set_ylabel(f"Error")
-        # else:
-        #     axs.set_ylabel(f"control term")
 
-        # # 调用函数
-        # write_data_to_file(all_list_act1, all_list_act2, '/tmp/pycharm_project_481/code/dataofresults/ddpg.txt')
 
-        # 将每个列表转换为DataFrame
-        df1 = pd.DataFrame(all_list_obs1)
-        df2 = pd.DataFrame(all_list_obs2)
-        df3 = pd.DataFrame(all_list_obs3)
+        plt.show()  # 显示图片
+        _pend = "_mu40"
+        plt.savefig(f"training_plot/{model_name0}{_pend}_err.png") 
+        print(f"图像已保存为 {model_name0}{_pend}_err.png")
+        # 关闭图表以释放内存
+        plt.close()
+        
+        save_dir = "export_errors_csv"
+        os.makedirs(save_dir, exist_ok=True)
 
-        # 写入同一个Excel文件的不同sheet中
-        # with pd.ExcelWriter('/tmp/pycharm_project_60/code/result.xlsx', engine='openpyxl') as writer:
-        #     df1.to_excel(writer, sheet_name='Sheet1', index=False)
-        #     df2.to_excel(writer, sheet_name='Sheet2', index=False)
-        #     df3.to_excel(writer, sheet_name='Sheet3', index=False)
+        # 将误差数组转成矩阵结构，保证长度一致
+        min_len = min(len(traj) for traj in all_list_obs1)  # 最短序列
+        err_x = np.array([traj[:min_len] for traj in all_list_obs1])
+        err_y = np.array([traj[:min_len] for traj in all_list_obs2])
+        err_z = np.array([traj[:min_len] for traj in all_list_obs3])
+        err_w = np.array([traj[:min_len] for traj in all_list_obs4])
 
-        # 移除边距
-        plt.margins(0, 0)
+        # 定义一个保存函数
+        def save_csv(filename, data):
+            filepath = os.path.join(save_dir, filename)
+            with open(filepath, 'w', newline='') as f:
+                writer = csv.writer(f)
+                header = ["episode"] + [f"t{i}" for i in range(data.shape[1])]
+                writer.writerow(header)
 
-        # 调整布局，让图表占满整个图片
-        plt.tight_layout()
+                for ep in range(data.shape[0]):
+                    writer.writerow([ep] + list(data[ep]))
+            print(f"Saved → {filepath}")
 
-        # 显示当前图
-        plt.show()
+        # 保存 4 组误差 CSV
+        save_csv("error_x.csv", err_x)
+        save_csv("error_y.csv", err_y)
+        save_csv("error_z.csv", err_z)
+        save_csv("error_w.csv", err_w)
+
+        print("All CSV export completed.")
 
 
 def testPPO3(model_name0):
@@ -374,6 +490,11 @@ def testPPO3(model_name0):
 
         # 显示当前图
         plt.show()
+        plt.savefig("training_plot/pt2.png") 
+        print("图像已保存为 pt2.png")
+        # 关闭图表以释放内存
+        plt.close()
+
 
 
 def write_to_excel(filepath, x, sheetName, num):
@@ -549,12 +670,12 @@ def  testyz(model_name0):
     print(prop.get_name())
     plt.rcParams['font.style'] = 'normal'
 
-    for i in range(10):
-        print(i)
-        write_to_excel('D:\\考研资料\\江南大学\\组会汇报\\result1.xlsx',all_list_obs1[i],str(0),i+2) #all_list_obs[i]是
-        write_to_excel('D:\\考研资料\\江南大学\\组会汇报\\result2.xlsx', all_list_obs2[i], str(0),i+2)  # all_list_obs2[i]是
-        write_to_excel('D:\\考研资料\\江南大学\\组会汇报\\result3.xlsx', all_list_obs3[i], str(0),i+2)  # all_list_obs3[i]是
-        write_to_excel('D:\\考研资料\\江南大学\\组会汇报\\result4.xlsx', all_list_obs4[i], str(0),i+2)  # all_list_obs4[i]是
+    # for i in range(10):
+    #     print(i)
+    #     write_to_excel('D:\\考研资料\\江南大学\\组会汇报\\result1.xlsx',all_list_obs1[i],str(0),i+2) #all_list_obs[i]是
+    #     write_to_excel('D:\\考研资料\\江南大学\\组会汇报\\result2.xlsx', all_list_obs2[i], str(0),i+2)  # all_list_obs2[i]是
+    #     write_to_excel('D:\\考研资料\\江南大学\\组会汇报\\result3.xlsx', all_list_obs3[i], str(0),i+2)  # all_list_obs3[i]是
+    #     write_to_excel('D:\\考研资料\\江南大学\\组会汇报\\result4.xlsx', all_list_obs4[i], str(0),i+2)  # all_list_obs4[i]是
     print(list_inital)
     # 分别为每种观测值绘制10条线
     for k in range(5):  # 对应obs[0], obs[1], obs[2]
@@ -608,6 +729,10 @@ def  testyz(model_name0):
 
         # 显示当前图
         plt.show()
+        plt.savefig("training_plot/pt3.png") 
+        print("图像已保存为 pt3.png")
+        # 关闭图表以释放内存
+        plt.close()
 
 
 def  testyz_revise(model_name0):
@@ -822,6 +947,10 @@ def  testyz_pmsm_2(model_name0):
 
         # 显示当前图
         plt.show()
+        plt.savefig("training_plot/pt4.png") 
+        print("图像已保存为 pt4.png")
+        # 关闭图表以释放内存
+        plt.close()
 
 
 
@@ -933,6 +1062,11 @@ def testPPO(model_name0,model_name1):
 
         # 显示当前图
         plt.show()
+        plt.savefig("training_plot/pt5.png") 
+        print("图像已保存为 pt5.png")
+        # 关闭图表以释放内存
+        plt.close()
+
 
     print(list_inital)
     print(list_inital2)
@@ -1572,6 +1706,10 @@ def getResult2(model_name0,model_name1):
         axs.legend()
         # 显示当前图
         plt.show()
+        plt.savefig("training_plot/pt6.png") 
+        print("图像已保存为 pt6.png")
+        # 关闭图表以释放内存
+        plt.close()
 
 def write_data_to_file(all_list_act1, all_list_act2, filename):
     with open(filename, 'w') as file:
@@ -1655,6 +1793,8 @@ def calculate_root_sum_of_squares2(file_path, sheet_index=0, column_index=0):
 
 
 if __name__=='__main__':
+
+    save_model_name = 'lorenz_f2_lr5en5_s1m'
     # file_path = '/tmp/pycharm_project_60/code/chaos_apl/mae,mse.xlsx'
     # result=0
     # results=[]
@@ -1665,7 +1805,7 @@ if __name__=='__main__':
     #
     #     print(f"The root of the sum of squares is: {result/10}")
     #     results.append(result/10)
-    function('lorenz_targeting_Lstm_continous_0')
+    # callback = function(save_model_name)
     #testyz('lorenz_targeting_Lstm_continous_0')
 
     # 开始计时
@@ -1682,7 +1822,10 @@ if __name__=='__main__':
 
     #testyz_pmsm_2('lorenz_targeting_Lstm_continous_0')
 
-    testPPO1('lorenz_targeting_Lstm_continous_0')
+    testPPO1('lorenz_f2_lr5en5_s1m')
+
+
+
     #testPPO3('lorenz_targeting_Lstm_continous_0')
     #testPPO('lorenz_targeting_Lstm_continous_0','lorenz_targeting_Lstm_continous_1')
     #getResult_pmsm('lorenz_targeting_Lstm_continous_0', 'lorenz_targeting_Lstm_continous_0')
