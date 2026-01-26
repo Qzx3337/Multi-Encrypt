@@ -16,6 +16,7 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 
+import hashlib
 
 ''' 
 GLOBAL Constants
@@ -96,6 +97,28 @@ def get_decrypted_img_path():
     path = "img/decrypted_image.png"
     return path
 
+def get_my_password():
+    return "mypassword987"
+
+def string_to_initial_value(password: str) -> float:
+    """
+    将用户输入的字符串密码转换为 (0, 1) 之间的浮点数，用作混沌系统的初值。
+    """
+    # 1. 使用 SHA-256 计算哈希 (得到一个 256位的 16进制字符串)
+    hash_obj = hashlib.sha256(password.encode('utf-8'))
+    hex_dig = hash_obj.hexdigest()
+
+    # 2. 将 16进制 转为巨大的整数
+    int_val = int(hex_dig, 16)
+
+    # 3. 归一化：除以 2^256 (SHA-256的最大可能值)，得到 0.0 ~ 1.0 之间的小数
+    float_val = int_val / (2 ** 256)
+    
+    # 避免正好是 0 或 1 (虽然概率极低，但混沌系统对边缘值敏感)
+    if float_val == 0: float_val = 0.123456789
+    if float_val == 1: float_val = 0.987654321
+    
+    return float_val
 
 
 def split_into_rgb_channels(image):
@@ -364,7 +387,7 @@ def map_to_integer(value):
     return round(value)  # 如果不在任何区间内，默认四舍五入
 
 
-def encrypt(seed: tuple, plain_path: str, cipher_path: str)-> tuple:
+def encrypt(seed: tuple, plain_path: str, cipher_path: str, password: str = None) -> tuple:
     x1, x2, x3, x4, x5, x6, x7, x8 = seed
     # print(x1.flat[:20])
     # print(x5.flat[:20])
@@ -374,13 +397,23 @@ def encrypt(seed: tuple, plain_path: str, cipher_path: str)-> tuple:
     
     blue, green, red = decompose_matrix(plain_img)  # 生成rgb M,N 1024, 1280
 
-
+    # 原本的初始值生成方式
     i1 = np.sum(red)
     i2 = np.sum(green)
+    # initial_value = (i1 + i2) / (255 * M_image * N_image * 2)  # Example initial value
+    # 带密码的初始值生成方式
+    i3 = np.sum(blue)
+    img_word = str(int(i1) + int(i2) + int(i3))
+    # 检查password必须是字符串
+    if isinstance(password, str):
+        raw_seed_str = password + img_word
+    elif password is None:
+        raw_seed_str = img_word
+    else:
+        raise ValueError("Password must be a string or None.")
+    initial_value = string_to_initial_value(raw_seed_str)
     theta = 3.9999  # Example parameter value
-    initial_value = (i1 + i2) / (255 * M_image * N_image * 2)  # Example initial value
     num_iterations = M_image * N_image  # Number of iterations
-
     logistic_sequence = logistic_map(theta, initial_value, num_iterations - 1)
     # print(len(logistic_sequence))
 
@@ -482,13 +515,24 @@ def encrypt(seed: tuple, plain_path: str, cipher_path: str)-> tuple:
     recover_image(I1_prime, I2_prime, I3_prime, cipher_path)
 
     chaos_seed = (x5, x6, x7, x8)
-    decry_key = (chaos_seed, initial_value)
+    decry_key = (chaos_seed, img_word, initial_value)
     return decry_key
 
 
-def decrypt(decry_key: tuple, cipher_path: str, decrypted_path: str):
+def decrypt(decry_key: tuple, cipher_path: str, decrypted_path: str, password: str = None) -> bool:
     # 对密钥解包
-    chaos_seed, initial_value_of_Q = decry_key
+    chaos_seed, img_word, initial_value_of_Q = decry_key
+    # 验证用户是否输入了正确的密码
+    if isinstance(password, str):
+        raw_seed_str = password + img_word
+    elif password is None:
+        raw_seed_str = img_word
+    else:
+        raise ValueError("Password must be a string or None.")
+    expected_initial_value = string_to_initial_value(raw_seed_str)
+    if not np.isclose(expected_initial_value, initial_value_of_Q):
+        print("Error: Incorrect password provided for decryption.")
+        return False
     # 解包混沌序列
     x5, x6, x7, x8 = chaos_seed
     # 解包和重新生成 Q 矩阵
@@ -574,8 +618,7 @@ def decrypt(decry_key: tuple, cipher_path: str, decrypted_path: str):
     # recover_image(I1_prime, I2_prime, I3_prime, cipher_img, decrypted_path)
     recover_image(I1_prime, I2_prime, I3_prime, decrypted_path)
 
-    # ... code ...
-
+    return True
 
 
 def test2(seed, plain_path=get_plain_img_path(), cipher_path=get_cipher_img_path(), decrypted_path=get_decrypted_img_path()):
@@ -967,12 +1010,14 @@ def check_decryption_psnr(plain_path: str, decrypted_path: str):
         return False
 
 
-def encrypt_and_decrypt_once(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None):
+def encrypt_and_decrypt_once(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None, password: str = None):
     if plain_path is None or cipher_path is None or decrypted_path is None:
         raise ValueError("File paths cannot be None.")
     seed = generate_seed()
-    decry_key = encrypt(seed, plain_path, cipher_path)
-    decrypt(decry_key, cipher_path, decrypted_path)
+    decry_key = encrypt(seed, plain_path, cipher_path, password)
+    if not decrypt(decry_key, cipher_path, decrypted_path, password=password):
+        print("Error: Decryption process failed due to incorrect password or other issues.")
+        return False
     if check_decryption_psnr(plain_path, decrypted_path):
         print("Decryption successful: The decrypted image matches the original.")
         if not check_decryption_pixel(plain_path, decrypted_path):
@@ -985,12 +1030,12 @@ def encrypt_and_decrypt_once(plain_path: str = None, cipher_path: str = None, de
         return False
 
 
-def encrypt_and_decrypt(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None):
+def encrypt_and_decrypt(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None, password: str = None):
     cnt = 0
     while True:
         cnt += 1
         print("********** Round: {} **********".format(cnt))
-        flag = encrypt_and_decrypt_once(plain_path, cipher_path, decrypted_path)
+        flag = encrypt_and_decrypt_once(plain_path, cipher_path, decrypted_path, password=password)
         if flag:
             break
         elif cnt >= 10:
@@ -1040,7 +1085,7 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
             print(f"[ACTION] Processing new image: {file_name}")
             try:
                 # 调用你写好的带有重试机制的函数
-                encrypt_and_decrypt(plain_path, cipher_path, decrypted_path)
+                encrypt_and_decrypt(plain_path, cipher_path, decrypted_path, password=get_my_password())
                 count_processed += 1
             except Exception as e:
                 print(f"[ERROR] Failed to process {file_name}. Reason: {str(e)}")
