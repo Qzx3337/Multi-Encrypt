@@ -481,51 +481,35 @@ def encrypt(seed: tuple, plain_path: str, cipher_path: str)-> tuple:
     # recover_image(I1_prime, I2_prime, I3_prime, plain_img, cipher_path)
     recover_image(I1_prime, I2_prime, I3_prime, cipher_path)
 
-    chaos_seed = (x5, x6, x7, x8)
-    decry_key = (chaos_seed, initial_value)
+    dec_seed = (x5, x6, x7, x8)
+    dec_sequences = (dec_sequences_I1, dec_sequences_I2, dec_sequences_I3)
+    decry_key = (dec_seed, dec_sequences, blocks_Q)
     return decry_key
 
 
 def decrypt(decry_key: tuple, cipher_path: str, decrypted_path: str):
-    # 对密钥解包
-    chaos_seed, initial_value_of_Q = decry_key
-    # 解包混沌序列
-    x5, x6, x7, x8 = chaos_seed
-    # 解包和重新生成 Q 矩阵
-    theta = 3.9999
-    num_iterations = M_image * N_image  # Number of iterations
-    logistic_sequence = logistic_map(theta, initial_value_of_Q, num_iterations - 1)
-    Q = mat_reshape(logistic_sequence)
-    blocks_Q = split_into_blocks(Q, p)
 
-    # dec_sequences_I1, dec_sequences_I2, dec_sequences_I3 = dec_sequences
-    # I1_prime = reshape_blocks(dec_sequences_I1, p)
-    # I2_prime = reshape_blocks(dec_sequences_I2, p)
-    # I3_prime = reshape_blocks(dec_sequences_I3, p)
-    # blocks_I1 = split_into_blocks(I1_prime, p)
-    # blocks_I2 = split_into_blocks(I2_prime, p)
-    # blocks_I3 = split_into_blocks(I3_prime, p)
+    dec_seed, dec_sequences, blocks_Q = decry_key
+    x5, x6, x7, x8 = dec_seed
+    dec_sequences_I1, dec_sequences_I2, dec_sequences_I3 = dec_sequences
+    I1_prime = reshape_blocks(dec_sequences_I1, p)
+    I2_prime = reshape_blocks(dec_sequences_I2, p)
+    I3_prime = reshape_blocks(dec_sequences_I3, p)
     
     cipher_img = cv2.imread(cipher_path)
     if cipher_img is None:
         print(f"Error: Unable to load image at {cipher_path}")
         return False
-    
-
-    blue_c, green_c, red_c = decompose_matrix(cipher_img)
-
-    blocks_I1 = split_into_blocks(red_c, p)   # 对应 Red
-    blocks_I2 = split_into_blocks(green_c, p) # 对应 Green
-    blocks_I3 = split_into_blocks(blue_c, p)  # 对应 Blue
-
-    bin_blocks_I1 = convert_to_8bit_binary(blocks_I1)
-    bin_blocks_I2 = convert_to_8bit_binary(blocks_I2)
-    bin_blocks_I3 = convert_to_8bit_binary(blocks_I3)
 
 
-    # bin_blocks_I1 = convert_to_8bit_binary(dec_sequences_I1)
-    # bin_blocks_I2 = convert_to_8bit_binary(dec_sequences_I2)
-    # bin_blocks_I3 = convert_to_8bit_binary(dec_sequences_I3)
+    blocks_I1 = split_into_blocks(I1_prime, p)
+    blocks_I2 = split_into_blocks(I2_prime, p)
+    blocks_I3 = split_into_blocks(I3_prime, p)
+    # print(len(blocks_I1))
+
+    bin_blocks_I1 = convert_to_8bit_binary(dec_sequences_I1)
+    bin_blocks_I2 = convert_to_8bit_binary(dec_sequences_I2)
+    bin_blocks_I3 = convert_to_8bit_binary(dec_sequences_I3)
 
     # 调用函数进行转换
     dna_sequences_I1 = binary_to_dna(bin_blocks_I1, x8, coding_rules)
@@ -1052,9 +1036,9 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
 
 if __name__ == "__main__":
     # 定义文件夹路径
-    plain_folder = "pictures/data1/plain_img"          # 未加密图片文件夹
-    cipher_folder = "pictures/data1/cipher_img"        # 加密后存放文件夹
-    decrypted_folder = "pictures/data1/decrypted_img"  # 解密后存放文件夹
+    plain_folder = "pictures/plain_img"          # 未加密图片文件夹
+    cipher_folder = "pictures/cipher_img"        # 加密后存放文件夹
+    decrypted_folder = "pictures/decrypted_img"  # 解密后存放文件夹
 
     # 确保源文件夹存在，否则无法处理
     if os.path.exists(plain_folder):
