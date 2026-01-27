@@ -3,6 +3,7 @@
 *.zip
 
 data/*
+experiments/**/*.png
 src/chaos_apl/
 src/DRL/export_errors_csv/
 src/DRL/lorenztensorboard2/

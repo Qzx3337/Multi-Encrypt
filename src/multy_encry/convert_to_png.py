@@ -49,7 +49,7 @@ def batch_convert_jpg_to_png(root_dir, delete_source=False):
 
 if __name__ == "__main__":
     # 请修改这里的路径
-    data_path = "./pictures" 
+    data_path = "data/hyper_kvasir" 
     
     # 建议先设为 False 运行一次，确认 PNG 生成无误后，再改为 True 删除 JPG
-    batch_convert_jpg_to_png(data_path, delete_source=False)
+    batch_convert_jpg_to_png(data_path, delete_source=True)

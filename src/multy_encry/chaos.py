@@ -1,7 +1,7 @@
 
 
 import gym
-# import gym_lorenz
+import gym_lorenz
 from stable_baselines3 import PPO
 # from stable_baselines3 import A2C
 import numpy as np
@@ -269,9 +269,10 @@ def binary_to_dna(binary_blocks, bd, coding_rules):
     """
     dna_blocks = []
 
-    # 确保 x1 和 binary_blocks 长度一致
+    # 确保 lorenz sequence, x1 和 binary_blocks 长度一致
     if len(bd) != len(binary_blocks):
-        raise ValueError("The length of x1 and binary_blocks must be the same.")
+        print(f"len(x1): {len(bd)}, len(binary_blocks): {len(binary_blocks)}")
+        raise ValueError("The length of lorenz sequence x1 and binary_blocks must be the same.")
 
     for i, block in enumerate(binary_blocks):
         # 选择当前块的编码规则
@@ -624,8 +625,8 @@ def test2(seed, plain_path=get_plain_img_path(), cipher_path=get_cipher_img_path
 
 def generate(num):
     env = gym.make('lorenz_transient-v0')
-    model = PPO.load('lorenz_f2_lr5en5_s1m.zip', env, verbose=1)
-    # model = PPO.load('lorenz_targeting_810k', env, verbose=1)
+    model = PPO.load('experiments/exp_lorenz/lorenz_f2_lr5en5_s1m.zip', env, verbose=1)
+    # model = PPO.load('experiments/exp_lorenz/lorenz_targeting_810k', env, verbose=1)
     # 创建并保存每种观测值对应的所有线条数据
     list_inital = []
 
@@ -667,7 +668,11 @@ def generate(num):
 
 
 def generate_seed():
-    num = int((M_image * N_image) / (p * p))
+    # 严重错误，这个值根本不是切片值
+    # num = int((M_image * N_image) / (p * p)) 
+    # 正确逻辑：使用向上取整ceil
+    # num = ceil(M/p) * ceil(N/p)
+    num = ((M_image + p - 1) // p) * ((N_image + p - 1) // p)
     list_x1, list_x2, list_x3, list_x4, list_x5, list_x6, list_x7, list_x8 = generate(num)
 
     x1 = np.array(list_x1)
@@ -751,6 +756,9 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
     并将结果分别保存到 cipher_dir 和 decrypted_dir。
     如果 decrypted_dir 中已存在同名文件，则跳过（增量更新）。
     """
+
+    global M_image, N_image
+
     # 1. 确保输出目录存在，如果不存在则创建
     os.makedirs(cipher_dir, exist_ok=True)
     os.makedirs(decrypted_dir, exist_ok=True)
@@ -783,6 +791,20 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
                 count_skipped += 1
                 continue
 
+
+            # 【修改点】预读图片并更新全局变量
+            # 在进入 encrypt_and_decrypt 之前，强制改变全局尺寸
+            temp_img = cv2.imread(plain_path)
+            if temp_img is None:
+                print(f"[ERROR] Could not read {file_name}, skipping.")
+                continue
+            
+            # 直接修改全局变量，这会影响到后续所有函数的执行（generate_seed, encrypt 等）
+            M_image = temp_img.shape[0]  # Height
+            N_image = temp_img.shape[1]  # Width
+            print(f"[INFO] Global size set to: {M_image}x{N_image} for {file_name}")
+            
+            
             # 5. 开始处理新图片
             print(f"[ACTION] Processing new image: {file_name}")
             try:
@@ -799,9 +821,9 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
 
 if __name__ == "__main__":
     # 定义文件夹路径
-    plain_folder = "pictures/data1/plain_img"          # 未加密图片文件夹
-    cipher_folder = "pictures/data1/cipher_img"        # 加密后存放文件夹
-    decrypted_folder = "pictures/data1/decrypted_img"  # 解密后存放文件夹
+    plain_folder = "experiments/w402/hyper_kvasir/plain_img"          # 未加密图片文件夹
+    cipher_folder = "experiments/w402/hyper_kvasir/cipher_img"        # 加密后存放文件夹
+    decrypted_folder = "experiments/w402/hyper_kvasir/decrypted_img"  # 解密后存放文件夹
 
     # 确保源文件夹存在，否则无法处理
     if os.path.exists(plain_folder):
