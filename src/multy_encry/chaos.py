@@ -1,4 +1,5 @@
 
+import os
 import gym
 import gym_lorenz
 from stable_baselines3 import PPO
@@ -16,7 +17,7 @@ import hashlib
 # --- 配置路径 (集中管理) ---
 
 # 1. 定义实验的主根目录 
-BASE_EXPERIMENT_DIR = "experiments/w401/hyper_kvasir"
+BASE_EXPERIMENT_DIR = "experiments/w402/hyper_kvasir"
 
 # 2. 定义输入目录 
 PLAIN_DIR = os.path.join(BASE_EXPERIMENT_DIR, "plain_img")   # 原图文件夹
@@ -370,8 +371,8 @@ def process_array_with_kalman(arr, measurement_uncertainty=1e-2, process_varianc
     return filtered_arr
 
 
-def encrypt(seed: tuple, plain_path: str, cipher_path: str, password: str = None) -> tuple:
-    x1, x2, x3, x4, x5, x6, x7, x8 = seed
+def encrypt(master_sequence: tuple, plain_path: str, cipher_path: str, password: str = None) -> tuple:
+    x1, x2, x3, x4 = master_sequence
     # print(x1.flat[:20])
     # print(x5.flat[:20])
     
@@ -423,21 +424,14 @@ def encrypt(seed: tuple, plain_path: str, cipher_path: str, password: str = None
 
     x1 = (np.mod(np.round(x1), 8) + 1).astype(np.uint8)
     x2 = (np.mod(np.round(x2), 8) + 1).astype(np.uint8)
-    x5 = (np.mod(np.round(x5), 8) + 1).astype(np.uint8)
-    x6 = (np.mod(np.round(x6), 8) + 1).astype(np.uint8)
     x3 = (np.mod(np.round(x3), 8) + 1).astype(np.uint8)
     x4 = (np.mod(np.round(x4), 8) + 1).astype(np.uint8)
-    x7 = (np.mod(np.round(x7), 8) + 1).astype(np.uint8)
-    x8 = (np.mod(np.round(x8), 8) + 1).astype(np.uint8)
-
 
     def process_array(arr):
-        # 取模运算并转换为 uint8
         processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
         return processed_arr
 
     # 对每个数组应用该函数
-
     for i in range(15):
         x1 = process_array_with_kalman(x1)
         x2 = process_array_with_kalman(x2)
@@ -448,20 +442,6 @@ def encrypt(seed: tuple, plain_path: str, cipher_path: str, password: str = None
         x2 = process_array(x2)
         x3 = process_array(x3)
         x4 = process_array(x4)
-
-        x5 = process_array_with_kalman(x5)
-        x6 = process_array_with_kalman(x6)
-        x7 = process_array_with_kalman(x7)
-        x8 = process_array_with_kalman(x8)
-
-        x5 = process_array(x5)
-        x6 = process_array(x6)
-        x7 = process_array(x7)
-        x8 = process_array(x8)
-
-
-    # print(x1.flat[:20])
-    # print(x5.flat[:20])
 
 
     # 调用函数进行转换
@@ -494,14 +474,14 @@ def encrypt(seed: tuple, plain_path: str, cipher_path: str, password: str = None
     # recover_image(I1_prime, I2_prime, I3_prime, plain_img, cipher_path)
     recover_image(I1_prime, I2_prime, I3_prime, cipher_path)
 
-    chaos_seed = (x5, x6, x7, x8)
-    decry_key = (chaos_seed, img_word, initial_value)
+
+    decry_key = (img_word, initial_value)
     return decry_key
 
 
-def decrypt(decry_key: tuple, cipher_path: str, decrypted_path: str, password: str = None) -> bool:
+def decrypt(decry_key: tuple, slave_sequence: tuple, cipher_path: str, decrypted_path: str, password: str = None) -> bool:
     # 对密钥解包
-    chaos_seed, img_word, initial_value_of_Q = decry_key
+    img_word, initial_value_of_Q = decry_key
     # 验证用户是否输入了正确的密码
     if isinstance(password, str):
         raw_seed_str = password + img_word
@@ -513,8 +493,7 @@ def decrypt(decry_key: tuple, cipher_path: str, decrypted_path: str, password: s
     if not np.isclose(expected_initial_value, initial_value_of_Q):
         print("Error: Incorrect password provided for decryption.")
         return False
-    # 解包混沌序列
-    x5, x6, x7, x8 = chaos_seed
+    
     # 解包和重新生成 Q 矩阵
     theta = 3.9999
     num_iterations = M_image * N_image  # Number of iterations
@@ -522,13 +501,34 @@ def decrypt(decry_key: tuple, cipher_path: str, decrypted_path: str, password: s
     Q = mat_reshape(logistic_sequence)
     blocks_Q = split_into_blocks(Q, p)
 
-    # dec_sequences_I1, dec_sequences_I2, dec_sequences_I3 = dec_sequences
-    # I1_prime = reshape_blocks(dec_sequences_I1, p)
-    # I2_prime = reshape_blocks(dec_sequences_I2, p)
-    # I3_prime = reshape_blocks(dec_sequences_I3, p)
-    # blocks_I1 = split_into_blocks(I1_prime, p)
-    # blocks_I2 = split_into_blocks(I2_prime, p)
-    # blocks_I3 = split_into_blocks(I3_prime, p)
+    
+    # 解包混沌序列
+    x5, x6, x7, x8 = slave_sequence
+    
+    x5 = (np.mod(np.round(x5), 8) + 1).astype(np.uint8)
+    x6 = (np.mod(np.round(x6), 8) + 1).astype(np.uint8)
+    x7 = (np.mod(np.round(x7), 8) + 1).astype(np.uint8)
+    x8 = (np.mod(np.round(x8), 8) + 1).astype(np.uint8)
+
+    def process_array(arr):
+        # 取模运算并转换为 uint8
+        processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
+        return processed_arr
+
+    # 对每个数组应用该函数
+
+    for i in range(15):
+        x5 = process_array_with_kalman(x5)
+        x6 = process_array_with_kalman(x6)
+        x7 = process_array_with_kalman(x7)
+        x8 = process_array_with_kalman(x8)
+
+        x5 = process_array(x5)
+        x6 = process_array(x6)
+        x7 = process_array(x7)
+        x8 = process_array(x8)
+
+
     
     cipher_img = cv2.imread(cipher_path)
     if cipher_img is None:
@@ -668,7 +668,10 @@ def generate_seed():
     x7 = np.array(list_x7)
     x8 = np.array(list_x8)
 
-    return x1, x2, x3, x4, x5, x6, x7, x8
+    master_sequence = (x1, x2, x3, x4)
+    slave_sequence = (x5, x6, x7, x8)
+
+    return master_sequence, slave_sequence
 
 
 def check_decryption_pixel(plain_path, decrypted_path):
@@ -704,9 +707,9 @@ def check_decryption_psnr(plain_path: str, decrypted_path: str):
 def encrypt_and_decrypt_once(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None, password: str = None):
     if plain_path is None or cipher_path is None or decrypted_path is None:
         raise ValueError("File paths cannot be None.")
-    seed = generate_seed()
-    decry_key = encrypt(seed, plain_path, cipher_path, password)
-    if not decrypt(decry_key, cipher_path, decrypted_path, password=password):
+    master_sequence, slave_sequence = generate_seed()
+    decry_key = encrypt(master_sequence, plain_path, cipher_path, password)
+    if not decrypt(decry_key, slave_sequence, cipher_path, decrypted_path, password=password):
         print("Error: Decryption process failed due to incorrect password or other issues.")
         return False
     if check_decryption_psnr(plain_path, decrypted_path):
