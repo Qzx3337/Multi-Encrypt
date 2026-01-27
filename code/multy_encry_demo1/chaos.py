@@ -1,22 +1,19 @@
+
+
 import gym
-import textwrap
-import cv2
-import sys
-
-# sys.path.append('/tmp/pycharm_project_60/code/gym-lorenz') 
-sys.path.append('/code/multy_encry_demo1/')  
-
-import gym_lorenz
-from PIL import Image
-
-from stable_baselines3 import A2C
+# import gym_lorenz
 from stable_baselines3 import PPO
-
-import random
-import matplotlib.pyplot as plt
+# from stable_baselines3 import A2C
 import numpy as np
-
+import cv2
+# from PIL import Image
+# import matplotlib.pyplot as plt
+import sys
 import hashlib
+# import random
+# import textwrap
+
+sys.path.append('/code/multy_encry_demo1/')  
 
 ''' 
 GLOBAL Constants
@@ -97,8 +94,10 @@ def get_decrypted_img_path():
     path = "img/decrypted_image.png"
     return path
 
+
 def get_my_password():
     return "mypassword987"
+
 
 def string_to_initial_value(password: str) -> float:
     """
@@ -129,6 +128,14 @@ def split_into_rgb_channels(image):
 
 
 def decompose_matrix(image: np.ndarray):
+    """
+    拆分图像的三个通道BGR
+    
+    Args:
+        image (np.ndarray): 输入的图像矩阵，形状为 (M, N, 3)。
+    Returns:
+        (B, G, R) ((np.matrix, np.matrix, np.matrix)): 包含三个矩阵的元组，分别对应 B、G、R 通道。
+    """
     blue, green, red = split_into_rgb_channels(image)
     for values, channel in zip((red, green, blue), (2, 1, 0)):
         img = np.zeros((values.shape[0], values.shape[1]), dtype=np.uint8)
@@ -146,13 +153,13 @@ def logistic_map(theta, initial_value, num_iterations):
     """
     Generate a sequence using the Logistic map.
 
-    Parameters:
-    theta (float): Parameter controlling the behavior of the map.
-    initial_value (float): Initial value of the sequence.
-    num_iterations (int): Number of iterations to generate.
+    Args:
+        theta (float): Parameter controlling the behavior of the map.
+        initial_value (float): Initial value of the sequence.
+        num_iterations (int): Number of iterations to generate.
 
     Returns:
-    list: A list containing the generated sequence.
+        list: A list containing the generated sequence.
     """
     # 确保 theta 和 initial_value 是标量
     sequence = [initial_value]
@@ -166,6 +173,9 @@ def logistic_map(theta, initial_value, num_iterations):
 
 
 def mat_reshape(logistic_sequence):
+    """
+    ??
+    """
     # 将列表转换为 NumPy 数组
     K1_array = np.array(logistic_sequence)
 
@@ -331,15 +341,6 @@ def dna_to_binary(dna_blocks, db, coding_rules):
     return binary_blocks
 
 
-# def recover_image(b, g, r, img: np.ndarray, path):
-#     img[:, :, 2] = r
-#     img[:, :, 1] = g
-#     img[:, :, 0] = b
-#     cv2.imwrite((path), img)
-#     print("image saved to:", path)
-#     return img
-
-
 def recover_image(b, g, r, path):
     """
     使用全局定义的尺寸 (M_image, N_image) 重组 BGR 通道并保存图像。
@@ -361,30 +362,18 @@ def recover_image(b, g, r, path):
     
     return img
 
-def testdna(seq1, seq2):
-    I1 = reshape_blocks(seq1, p)
-    I2 = reshape_blocks(seq2, p)
 
-    are_equivalent = np.array_equal(I1, I2)
-    print("Are the matrices equivalent?", are_equivalent)  # 输出: Are the matrices equivalent? True
-    # print("I1 :")
-    # print(I1.flat[:10])  # 使用 .flat 获取一个迭代器，可以按行优先顺序访问元素
+def process_array_with_kalman(arr, measurement_uncertainty=1e-2, process_variance=1e-5):
+    # 使用数组的第一个值作为初始估计值
+    initial_estimate = arr[0]
+    kf = KalmanFilter1D(initial_estimate, measurement_uncertainty, process_variance)
 
-    # print("\nI2 :")
-    # print(I2.flat[:10])
+    # 对数组中的每个元素进行卡尔曼滤波
+    filtered_arr = np.array([kf.update(num) for num in arr])
 
+    # print(filtered_arr.flat[:20])
 
-# 定义区间及其对应的目标整数
-intervals = [
-    (-5, -3), (-3, -1), (-1, 1), (1, 3), (3, 5)
-]
-targets = [1, 2, 3, 4, 5]  # 对应每个区间的整数
-
-def map_to_integer(value):
-    for (lower, upper), target in zip(intervals, targets):
-        if lower <= value < upper:
-            return target
-    return round(value)  # 如果不在任何区间内，默认四舍五入
+    return filtered_arr
 
 
 def encrypt(seed: tuple, plain_path: str, cipher_path: str, password: str = None) -> tuple:
@@ -448,12 +437,8 @@ def encrypt(seed: tuple, plain_path: str, cipher_path: str, password: str = None
 
 
     def process_array(arr):
-        # 四舍五入并映射到区间
-        # mapped_arr = np.array([map_to_integer(num) for num in arr])
-
         # 取模运算并转换为 uint8
         processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
-        # processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
         return processed_arr
 
     # 对每个数组应用该函数
@@ -654,6 +639,7 @@ def generate(num):
 
     obs = env.reset()
 
+    num += 1500
     for i in range(num):
         action, _states = model.predict(obs)
         obs, reward, dones, info = env.step(action)
@@ -678,295 +664,9 @@ def generate(num):
     return list_obs1, list_obs2, list_obs3, list_obs4, list_obs5, list_obs6, list_obs7, list_obs8
 
 
-def plot_rgb_histogram(image_path):
-    # 读取图片
-    image = cv2.imread(image_path)
-
-    # 检查图片是否成功加载
-    if image is None:
-        print(f"Error: Unable to load image at {image_path}")
-        return
-
-    # 将BGR图像转换为RGB图像（因为OpenCV默认读取的是BGR格式）
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    # 计算每个通道的直方图
-    hist_red, bins_red = np.histogram(image_rgb[:, :, 0].ravel(), bins=256, range=[0, 256])
-    hist_green, bins_green = np.histogram(image_rgb[:, :, 1].ravel(), bins=256, range=[0, 256])
-    hist_blue, bins_blue = np.histogram(image_rgb[:, :, 2].ravel(), bins=256, range=[0, 256])
-
-    # 定义绘制直方图的函数
-    def plot_histogram(hist, bins, color):
-        plt.figure(figsize=(6, 4))
-        plt.bar(bins[:-1], hist, width=1, color=color, alpha=0.7)
-        plt.xlim([0, 256])
-        plt.show()
-
-    # 绘制并显示红色通道的直方图
-    plot_histogram(hist_red, bins_red, 'red')
-
-    # 绘制并显示绿色通道的直方图
-    plot_histogram(hist_green, bins_green, 'green')
-
-    # 绘制并显示蓝色通道的直方图
-    plot_histogram(hist_blue, bins_blue, 'blue')
-
-
-def calculate_correlation(image, direction):
-    if direction == 'horizontal':
-        return np.corrcoef(image[:, :-1].ravel(), image[:, 1:].ravel())[0, 1]
-    elif direction == 'vertical':
-        return np.corrcoef(image[:-1, :].ravel(), image[1:, :].ravel())[0, 1]
-    elif direction == 'diagonal':
-        h, w = image.shape[:2]
-        diag = np.array([image[i, i] for i in range(min(h, w))])
-        return np.corrcoef(diag[:-1], diag[1:])[0, 1]
-
-
-def plot_correlation_distribution(image, channel, direction):
-    if channel == 'B':
-        channel_image = image[:, :, 0]
-    elif channel == 'G':
-        channel_image = image[:, :, 1]
-    elif channel == 'R':
-        channel_image = image[:, :, 2]
-
-    if direction == 'horizontal':
-        x = channel_image[:, :-1].ravel()
-        y = channel_image[:, 1:].ravel()
-    elif direction == 'vertical':
-        x = channel_image[:-1, :].ravel()
-        y = channel_image[1:, :].ravel()
-    elif direction == 'diagonal':
-        h, w = channel_image.shape
-        diag = np.array([channel_image[i, i] for i in range(min(h, w))])
-        x = diag[:-1]
-        y = diag[1:]
-
-    plt.scatter(x, y, s=1, alpha=0.5)
-    plt.title(f'{direction.capitalize()} Direction Correlation Distribution')
-    plt.xlabel('Pixel Value')
-    plt.ylabel('Adjacent Pixel Value')
-    plt.show()
-
-
-def generate_dis_pic(plain_path=get_plain_img_path(), cipher_path=get_cipher_img_path()):
-    """
-    生成原图和加密图的相关系数及相关分布图
-    """
-    # 加密前图像路径
-    original_image_path = plain_path
-    # 加密后图像路径
-    encrypted_image_path = cipher_path
-
-    # 读取图像
-    original_image = cv2.imread(original_image_path)
-    encrypted_image = cv2.imread(encrypted_image_path)
-
-    # 将BGR图像转换为RGB图像（因为OpenCV默认读取的是BGR格式）
-    original_image_rgb = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-    encrypted_image_rgb = cv2.cvtColor(encrypted_image, cv2.COLOR_BGR2RGB)
-
-    # 计算相关系数
-    correlations_original = {
-        'horizontal': calculate_correlation(original_image_rgb, 'horizontal'),
-        'vertical': calculate_correlation(original_image_rgb, 'vertical'),
-        'diagonal': calculate_correlation(original_image_rgb, 'diagonal')
-    }
-
-    correlations_encrypted = {
-        'horizontal': calculate_correlation(encrypted_image_rgb, 'horizontal'),
-        'vertical': calculate_correlation(encrypted_image_rgb, 'vertical'),
-        'diagonal': calculate_correlation(encrypted_image_rgb, 'diagonal')
-    }
-
-    # 打印相关系数
-    print("Original Image Correlations:")
-    for direction, correlation in correlations_original.items():
-        print(f"{direction.capitalize()}: {correlation}")
-
-    print("\nEncrypted Image Correlations:")
-    for direction, correlation in correlations_encrypted.items():
-        print(f"{direction.capitalize()}: {correlation}")
-
-    # 绘制相关分布图
-    plot_correlation_distribution(original_image_rgb, 'R', 'horizontal')
-    plot_correlation_distribution(original_image_rgb, 'R', 'vertical')
-    plot_correlation_distribution(original_image_rgb, 'R', 'diagonal')
-
-    plot_correlation_distribution(encrypted_image_rgb, 'R', 'horizontal')
-    plot_correlation_distribution(encrypted_image_rgb, 'R', 'vertical')
-    plot_correlation_distribution(encrypted_image_rgb, 'R', 'diagonal')
-
-
-
-def process_array_with_kalman(arr, measurement_uncertainty=1e-2, process_variance=1e-5):
-    # 使用数组的第一个值作为初始估计值
-    initial_estimate = arr[0]
-    kf = KalmanFilter1D(initial_estimate, measurement_uncertainty, process_variance)
-
-    # 对数组中的每个元素进行卡尔曼滤波
-    filtered_arr = np.array([kf.update(num) for num in arr])
-
-    # print(filtered_arr.flat[:20])
-
-    return filtered_arr
-
-
-def load_image(path, channel='B'):
-    img = Image.open(path)
-    if channel == 'B':
-        # 转换为灰度图像
-        img = img.convert('L')
-    else:
-        # 提取特定颜色通道（未实现）
-        r, g, b = img.split()
-        if channel == 'R':
-            img = r
-        elif channel == 'G':
-            img = g
-        elif channel == 'B':
-            img = b
-    return np.array(img)
-
-
-def calculate_correlation_distribution(img):
-    h, w = img.shape
-
-    horizontal_pairs = [(img[i, j], img[i, (j + 1) % w]) for i in range(h) for j in range(w - 1)]
-    vertical_pairs = [(img[i, j], img[(i + 1) % h, j]) for i in range(h - 1) for j in range(w)]
-    diagonal_pairs = [(img[i, j], img[i + 1, j + 1]) for i in range(h - 1) for j in range(w - 1) if
-                      i < h - 1 and j < w - 1]
-
-    return horizontal_pairs, vertical_pairs, diagonal_pairs
-
-
-def calculate_correlation_coefficients(pairs_list):
-    coefficients = []
-    for pairs in pairs_list:
-        x_values = [pair[0] for pair in pairs]
-        y_values = [pair[1] for pair in pairs]
-
-        # 计算相关性系数
-        correlation_matrix = np.corrcoef(x_values, y_values)
-        correlation_coefficient = correlation_matrix[0, 1]
-        coefficients.append(correlation_coefficient)
-
-    return coefficients
-
-
-def print_results(coefficients):
-    print("Image\t\tHorizontal\tVertical\tDiagonal")
-    print(f"Original Image\t{coefficients[0]:.5f}\t\t{coefficients[1]:.5f}\t\t{coefficients[2]:.5f}")
-
-
-def plot_correlation_distributions(pairs_list):
-    fig, axs = plt.subplots(1, len(pairs_list), figsize=(15, 5))
-
-    for ax, pairs in zip(axs, pairs_list):
-        x_values = [pair[0] for pair in pairs]
-        y_values = [pair[1] for pair in pairs]
-
-        ax.scatter(x_values, y_values, s=1, c='blue', alpha=0.5)
-        ax.set_xlim(0, 255)
-        ax.set_ylim(0, 255)
-
-    plt.tight_layout()
-    plt.show()
-
-
-def process_and_visualize(image_path):
-    img = load_image(image_path, channel='B')
-    horizontal_pairs, vertical_pairs, diagonal_pairs = calculate_correlation_distribution(img)
-    pairs_list = [horizontal_pairs, vertical_pairs, diagonal_pairs]
-
-    # 计算相关性系数
-    coefficients = calculate_correlation_coefficients(pairs_list)
-
-    # 输出结果
-    print_results(coefficients)
-
-    # 绘制图表
-    plot_correlation_distributions(pairs_list)
-
-
-import numpy as np
-from PIL import Image
-
-
-def calculate_entropy(image_path):
-    # 打开图像并转换为灰度图像
-    img = Image.open(image_path).convert('L')
-    # 转换为numpy数组
-    img_array = np.array(img)
-
-    # 计算直方图
-    histogram, _ = np.histogram(img_array.flatten(), bins=256, range=[0, 256])
-
-    # 将直方图转换为概率分布
-    probabilities = histogram / float(np.sum(histogram))
-
-    # 过滤掉零概率，避免log(0)错误
-    probabilities = probabilities[probabilities > 0]
-
-    # 计算信息熵
-    entropy = -np.sum(probabilities * np.log2(probabilities))
-
-    return entropy
-
-
-def NPCR(img1, img2):
-    # opencv颜色通道顺序为BGR
-    img1 = cv2.imread(img1)
-    img2 = cv2.imread(img2)
-    w, h, _ = img1.shape
-
-    # 图像通道拆分
-    B1, G1, R1 = cv2.split(img1)
-    B2, G2, R2 = cv2.split(img2)
-    # 返回数组的排序后的唯一元素和每个元素重复的次数
-    ar, num = np.unique((R1 != R2), return_counts=True)
-    R_npcr = (num[0] if ar[0] == True else num[1]) / (w * h)
-    ar, num = np.unique((G1 != G2), return_counts=True)
-    G_npcr = (num[0] if ar[0] == True else num[1]) / (w * h)
-    ar, num = np.unique((B1 != B2), return_counts=True)
-    B_npcr = (num[0] if ar[0] == True else num[1]) / (w * h)
-
-    return R_npcr, G_npcr, B_npcr
-
-
-def UACI(img1_path: str, img2_path: str):
-    """    """
-    img1 = cv2.imread(img1_path)
-    img2 = cv2.imread(img2_path)
-    w, h, _ = img1.shape
-    # 图像通道拆分
-    B1, G1, R1 = cv2.split(img1)
-    B2, G2, R2 = cv2.split(img2)
-    # 元素为uint8类型取值范围：0到255
-    # print(R1.dtype)
-
-    # 强制转换元素类型，为了运算
-    R1 = R1.astype(np.int16)
-    R2 = R2.astype(np.int16)
-    G1 = G1.astype(np.int16)
-    G2 = G2.astype(np.int16)
-    B1 = B1.astype(np.int16)
-    B2 = B2.astype(np.int16)
-
-    sumR = np.sum(abs(R1 - R2))
-    sumG = np.sum(abs(G1 - G2))
-    sumB = np.sum(abs(B1 - B2))
-    R_uaci = sumR / 255 / (w * h)
-    G_uaci = sumG / 255 / (w * h)
-    B_uaci = sumB / 255 / (w * h)
-
-    return R_uaci, G_uaci, B_uaci
-
-
 def generate_seed():
     num = int((M_image * N_image) / (p * p))
-    list_x1, list_x2, list_x3, list_x4, list_x5, list_x6, list_x7, list_x8 = generate(num + 1500)
+    list_x1, list_x2, list_x3, list_x4, list_x5, list_x6, list_x7, list_x8 = generate(num)
 
     x1 = np.array(list_x1)
     x2 = np.array(list_x2)
