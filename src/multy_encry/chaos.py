@@ -1,5 +1,4 @@
 
-
 import gym
 import gym_lorenz
 from stable_baselines3 import PPO
@@ -13,7 +12,18 @@ import hashlib
 # import random
 # import textwrap
 
-sys.path.append('/code/multy_encry_demo1/')  
+
+# --- 配置路径 (集中管理) ---
+
+# 1. 定义实验的主根目录 
+BASE_EXPERIMENT_DIR = "experiments/w401/hyper_kvasir"
+
+# 2. 定义输入目录 
+PLAIN_DIR = os.path.join(BASE_EXPERIMENT_DIR, "plain_img")   # 原图文件夹
+CIPHER_DIR = os.path.join(BASE_EXPERIMENT_DIR, "cipher_img") # 密图文件夹
+DECRYPTED_DIR = os.path.join(BASE_EXPERIMENT_DIR, "decrypted_img") # 解密图文件夹
+
+# --- ----------------- ---
 
 ''' 
 GLOBAL Constants
@@ -22,13 +32,13 @@ GLOBAL Constants
 a, b, c = 10, 2.667, 28
 x0, y0, z0 = 0, 0, 0
 
-# M_image = 1024
-# N_image = 1280
 
 M_image = 512
 N_image = 512
 
 p = 8
+
+MY_PASSWORD = "password987"  # 你可以修改为任何你想要的密码甚至为None
 
 # DNA-Encoding RULE #1 A = 00, T=01, G=10, C=11
 dna = {}
@@ -78,25 +88,6 @@ class KalmanFilter1D:
         self.estimate_error = (1 - kalman_gain) * prediction_error
 
         return self.estimate
-
-
-def get_plain_img_path():
-    path = "data1/image_s0002_i0001.jpg"
-    return path
-
-
-def get_cipher_img_path():
-    path = "img/encrypted_image.png"
-    return path
-
-
-def get_decrypted_img_path():
-    path = "img/decrypted_image.png"
-    return path
-
-
-def get_my_password():
-    return "mypassword987"
 
 
 def string_to_initial_value(password: str) -> float:
@@ -383,6 +374,7 @@ def encrypt(seed: tuple, plain_path: str, cipher_path: str, password: str = None
     x1, x2, x3, x4, x5, x6, x7, x8 = seed
     # print(x1.flat[:20])
     # print(x5.flat[:20])
+    
     plain_img = cv2.imread(plain_path)
     if plain_img is None:
         raise FileNotFoundError(f"Unable to load image at {plain_path}")
@@ -430,11 +422,11 @@ def encrypt(seed: tuple, plain_path: str, cipher_path: str, password: str = None
 
 
     x1 = (np.mod(np.round(x1), 8) + 1).astype(np.uint8)
-    x2 = (np.mod(np.round(x2) , 8) + 1).astype(np.uint8)
+    x2 = (np.mod(np.round(x2), 8) + 1).astype(np.uint8)
     x5 = (np.mod(np.round(x5), 8) + 1).astype(np.uint8)
     x6 = (np.mod(np.round(x6), 8) + 1).astype(np.uint8)
-    x3 = (np.mod(np.round(x3) , 8) + 1).astype(np.uint8)
-    x4 = (np.mod(np.round(x4) , 8) + 1).astype(np.uint8)
+    x3 = (np.mod(np.round(x3), 8) + 1).astype(np.uint8)
+    x4 = (np.mod(np.round(x4), 8) + 1).astype(np.uint8)
     x7 = (np.mod(np.round(x7), 8) + 1).astype(np.uint8)
     x8 = (np.mod(np.round(x8), 8) + 1).astype(np.uint8)
 
@@ -609,21 +601,10 @@ def decrypt(decry_key: tuple, cipher_path: str, decrypted_path: str, password: s
     return True
 
 
-def test2(seed, plain_path=get_plain_img_path(), cipher_path=get_cipher_img_path(), decrypted_path=get_decrypted_img_path()):
-
-    decry_key = encrypt(seed, plain_path, cipher_path)
-
-    decrypt(decry_key, cipher_path, decrypted_path)
-    # =========================================================
-
-    # testdna(test_I2_blocks, dncrypted_blocks_I2)
-
-    # are_equivalent = np.array_equal(green, I2_prime)
-    # print("Are the matrices equivalent?", are_equivalent)  # 输出: Are the matrices equivalent? True
-
-
-
-def generate(num):
+def generate(num: int):
+    """
+    生成混沌序列    
+    """
     env = gym.make('lorenz_transient-v0')
     model = PPO.load('experiments/exp_lorenz/lorenz_f2_lr5en5_s1m.zip', env, verbose=1)
     # model = PPO.load('experiments/exp_lorenz/lorenz_targeting_810k', env, verbose=1)
@@ -668,6 +649,9 @@ def generate(num):
 
 
 def generate_seed():
+    """
+    将混沌序列转换为 np.array
+    """
     # 严重错误，这个值根本不是切片值
     # num = int((M_image * N_image) / (p * p)) 
     # 正确逻辑：使用向上取整ceil
@@ -809,7 +793,7 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
             print(f"[ACTION] Processing new image: {file_name}")
             try:
                 # 调用你写好的带有重试机制的函数
-                encrypt_and_decrypt(plain_path, cipher_path, decrypted_path, password=get_my_password())
+                encrypt_and_decrypt(plain_path, cipher_path, decrypted_path, password=MY_PASSWORD)
                 count_processed += 1
             except Exception as e:
                 print(f"[ERROR] Failed to process {file_name}. Reason: {str(e)}")
@@ -821,9 +805,9 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
 
 if __name__ == "__main__":
     # 定义文件夹路径
-    plain_folder = "experiments/w402/hyper_kvasir/plain_img"          # 未加密图片文件夹
-    cipher_folder = "experiments/w402/hyper_kvasir/cipher_img"        # 加密后存放文件夹
-    decrypted_folder = "experiments/w402/hyper_kvasir/decrypted_img"  # 解密后存放文件夹
+    plain_folder = PLAIN_DIR
+    cipher_folder = CIPHER_DIR
+    decrypted_folder = DECRYPTED_DIR
 
     # 确保源文件夹存在，否则无法处理
     if os.path.exists(plain_folder):
@@ -834,63 +818,3 @@ if __name__ == "__main__":
     else:
         print(f"Error: Source directory '{plain_folder}' not found.")
 
-
-# if __name__ == "__main__":
-
-    # test2(generate_seed())
-
-    # cnt = 0
-    # while True:
-    #     cnt += 1
-    #     print("\n********** Test Round {} **********".format(cnt))
-    #     flag = encrypt_and_decrypt(get_plain_img_path(), get_cipher_img_path(), get_decrypted_img_path())
-    #     if flag:
-    #         break
-
-    # try:
-    #     encrypt_and_decrypt(get_plain_img_path(), get_cipher_img_path(), get_decrypted_img_path())
-    # except Exception as e:
-    #     print("An error occurred during encryption/decryption:", str(e))
-
-    # pass
-
-    # plot_rgb_histogram(get_plain_img_path())
-    # plot_rgb_histogram(get_cipher_img_path())
-
-
-    # generate_dis_pic()
-
- 
-    # entropy = calculate_entropy(get_cipher_img_path())
-    # print(entropy)
- 
-
-    # image_paths = [
-    #     get_plain_img_path(),
-    #     get_cipher_img_path()
-    # ]
-    # for path in image_paths:
-    #     process_and_visualize(path)
-
-    # # 示例使用 PIL 加载图像并转换为灰度图像
-    # from PIL import Image
-    #
-    # img1_path = 'path_to_image1.png'
-    # img2_path = 'path_to_image2.png'
-    #
-    # img1 = np.array(Image.open(img1_path).convert('L'))
-    # img2 = np.array(Image.open(img2_path).convert('L'))
-    #
-    # R_npcr, G_npcr, B_npcr = NPCR(img1, img2)
-    # print('*********PSNR*********')
-    # # 百分数表示，保留小数点后4位
-    # print('Red  :{:.4%}'.format(R_npcr))
-    # print('Green:{:.4%}'.format(G_npcr))
-    # print('Blue :{:.4%}'.format(B_npcr))
-    #
-    # R_uaci, G_uaci, B_uaci = UACI(img1, img2)
-    # print('*********UACI*********')
-    # # 百分数表示，保留小数点后4位
-    # print('Red  :{:.4%}'.format(R_uaci))
-    # print('Green:{:.4%}'.format(G_uaci))
-    # print('Blue :{:.4%}'.format(B_uaci))

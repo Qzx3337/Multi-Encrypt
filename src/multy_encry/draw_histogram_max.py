@@ -3,6 +3,20 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
+# --- 配置路径 (集中管理) ---
+
+# 1. 定义实验的主根目录 
+BASE_EXPERIMENT_DIR = "experiments/w401/hyper_kvasir"
+
+# 2. 定义输入目录 
+PLAIN_DIR = os.path.join(BASE_EXPERIMENT_DIR, "plain_img")   # 原图文件夹
+CIPHER_DIR = os.path.join(BASE_EXPERIMENT_DIR, "cipher_img") # 密图文件夹
+
+# 3. 定义分析结果的总输出目录
+ANALYSIS_DIR = os.path.join(BASE_EXPERIMENT_DIR, "analysis")
+
+# --- ----------------- ---
+
 def get_max_pixel_count(img):
     """
     【新增简单逻辑】：
@@ -146,21 +160,23 @@ def process_paired_folders(plain_dir, cipher_dir,
     print(f"Finished. Processed {count} image pairs.\n")
 
 if __name__ == "__main__":
-    # --- 配置路径 ---
-    
-    plain_dir = "pictures/data01/plain_img"
-    cipher_dir = "pictures/data01/cipher_img"
-    
+
     plain_out = {
-        "linear": "pictures/data01/plain_hist",
-        "log": "pictures/data01/plain_hist_log"
+        # "linear": os.path.join(ANALYSIS_DIR, "plain_hist"),
+        "log":    os.path.join(ANALYSIS_DIR, "plain_hist_log")
     }
     
     cipher_out = {
-        "linear": "pictures/data01/cipher_hist",
-        "log": "pictures/data01/cipher_hist_log"
+        # "linear": os.path.join(ANALYSIS_DIR, "cipher_hist"),
+        "log":    os.path.join(ANALYSIS_DIR, "cipher_hist_log")
     }
 
-    process_paired_folders(plain_dir, cipher_dir, plain_out, cipher_out)
+    # --- 打印路径信息以便确认 ---
+    print(f"Base Dir: {BASE_EXPERIMENT_DIR}")
+    print(f"Analysis Output Dir: {ANALYSIS_DIR}")
+    print("-" * 30)
+
+    # --- 执行处理 ---
+    process_paired_folders(PLAIN_DIR, CIPHER_DIR, plain_out, cipher_out)
 
     
