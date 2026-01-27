@@ -1,9 +1,9 @@
-code/chaos_apl/
-code/export_errors_csv
-code/lorenztensorboard2/
-code/EnvironmentSetup.pdf
-code/**/*.zip
-!code/lorenz_f2_lr5en5_s1m.zip
 
-code/multy_encry_demo1/CT_data/*
-code/multy_encry_demo1/pictures/*
+*.pdf
+*.zip
+
+data/*
+src/chaos_apl/
+src/DRL/export_errors_csv/
+src/DRL/lorenztensorboard2/
+!src/DRL/lorenz_f2_lr5en5_s1m.zip
