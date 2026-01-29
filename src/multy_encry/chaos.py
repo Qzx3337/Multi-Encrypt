@@ -24,6 +24,9 @@ PLAIN_DIR = os.path.join(BASE_EXPERIMENT_DIR, "plain_img")   # 原图文件夹
 CIPHER_DIR = os.path.join(BASE_EXPERIMENT_DIR, "cipher_img") # 密图文件夹
 DECRYPTED_DIR = os.path.join(BASE_EXPERIMENT_DIR, "decrypted_img") # 解密图文件夹
 
+# 模型文件所在目录
+MODEL_DIR = "experiments/exp_lorenz/lorenz_f2_lr5en5_s1m.zip"
+
 # --- ----------------- ---
 
 ''' 
@@ -447,19 +450,15 @@ def encrypt(master_sequence: tuple, plain_path: str, cipher_path: str, password:
     # 调用函数进行转换
     dna_sequences_I1 = binary_to_dna(bin_blocks_I1, x1, coding_rules)
     bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x2, coding_rules)
-
     dna_sequences_I2 = binary_to_dna(bin_blocks_I2, x1, coding_rules)
     bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x2, coding_rules)
-
     dna_sequences_I3 = binary_to_dna(bin_blocks_I3, x1, coding_rules)
     bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x2, coding_rules)
 
     dna_sequences_I1 = binary_to_dna(bin_sequences_I1, x3, coding_rules)
     bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x4, coding_rules)
-
     dna_sequences_I2 = binary_to_dna(bin_sequences_I2, x3, coding_rules)
     bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x4, coding_rules)
-
     dna_sequences_I3 = binary_to_dna(bin_sequences_I3, x3, coding_rules)
     bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x4, coding_rules)
 
@@ -606,7 +605,7 @@ def generate(num: int):
     生成混沌序列    
     """
     env = gym.make('lorenz_transient-v0')
-    model = PPO.load('experiments/exp_lorenz/lorenz_f2_lr5en5_s1m.zip', env, verbose=1)
+    model = PPO.load(MODEL_DIR, env, verbose=1)
     # model = PPO.load('experiments/exp_lorenz/lorenz_targeting_810k', env, verbose=1)
     # 创建并保存每种观测值对应的所有线条数据
     list_inital = []

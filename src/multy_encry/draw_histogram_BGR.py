@@ -8,7 +8,7 @@ from glob import glob
 # --- 配置路径 (集中管理) ---
 
 # 1. 定义实验的主根目录 
-BASE_EXPERIMENT_DIR = "experiments/w401/hyper_kvasir"
+BASE_EXPERIMENT_DIR = "experiments/w201/lung_CT"
 
 # 2. 定义输入目录 
 PLAIN_DIR = os.path.join(BASE_EXPERIMENT_DIR, "plain_img")   # 原图文件夹
