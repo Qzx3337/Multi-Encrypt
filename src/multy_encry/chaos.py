@@ -1,5 +1,6 @@
 
 import os
+import traceback
 import gym
 import gym_lorenz
 from stable_baselines3 import PPO
@@ -17,7 +18,7 @@ import hashlib
 # --- 配置路径 (集中管理) ---
 
 # 1. 定义实验的主根目录 
-BASE_EXPERIMENT_DIR = "experiments/w402/hyper_kvasir"
+BASE_EXPERIMENT_DIR = "experiments/w501/test_data"
 
 # 2. 定义输入目录 
 PLAIN_DIR = os.path.join(BASE_EXPERIMENT_DIR, "plain_img")   # 原图文件夹
@@ -33,34 +34,14 @@ MODEL_DIR = "experiments/exp_lorenz/lorenz_f2_lr5en5_s1m.zip"
 GLOBAL Constants
 '''
 # Lorenz paramters and initial conditions
-a, b, c = 10, 2.667, 28
-x0, y0, z0 = 0, 0, 0
+# a, b, c = 10, 2.667, 28
+# x0, y0, z0 = 0, 0, 0
 
 
 M_image = 512
 N_image = 512
-
 p = 8
-
 MY_PASSWORD = "password987"  # 你可以修改为任何你想要的密码甚至为None
-
-# DNA-Encoding RULE #1 A = 00, T=01, G=10, C=11
-dna = {}
-dna["00"] = "A"
-dna["01"] = "T"
-dna["10"] = "G"
-dna["11"] = "C"
-dna["A"] = [0, 0]
-dna["T"] = [0, 1]
-dna["G"] = [1, 0]
-dna["C"] = [1, 1]
-# DNA xor
-dna["AA"] = dna["TT"] = dna["GG"] = dna["CC"] = "A"
-dna["AG"] = dna["GA"] = dna["TC"] = dna["CT"] = "G"
-dna["AC"] = dna["CA"] = dna["GT"] = dna["TG"] = "C"
-dna["AT"] = dna["TA"] = dna["CG"] = dna["GC"] = "T"
-# Maximum time point and total number of time points
-tmax, N = 100, 10000
 
 coding_rules = {
     1: {'00': 'A', '11': 'T', '10': 'C', '01': 'G'},
@@ -115,36 +96,23 @@ def string_to_initial_value(password: str) -> float:
     return float_val
 
 
-def split_into_rgb_channels(image):
-    red = image[:, :, 2]
-    green = image[:, :, 1]
-    blue = image[:, :, 0]
-    return red, green, blue
-
-
-def decompose_matrix(image: np.ndarray):
+def split_channels(image: np.ndarray):
     """
     拆分图像的三个通道BGR
     
     Args:
-        image (np.ndarray): 输入的图像矩阵，形状为 (M, N, 3)。
+        image (np.ndarray): 输入的图像矩阵，形状为 (M, N, C)。
     Returns:
-        (B, G, R) ((np.matrix, np.matrix, np.matrix)): 包含三个矩阵的元组，分别对应 B、G、R 通道。
+        (B, G, R) ((np.ndarray, np.ndarray, np.ndarray)): 包含三个 W x H 矩阵的元组，分别对应 B、G、R 通道。
     """
-    blue, green, red = split_into_rgb_channels(image)
-    for values, channel in zip((red, green, blue), (2, 1, 0)):
-        img = np.zeros((values.shape[0], values.shape[1]), dtype=np.uint8)
-        img[:, :] = (values)
-        if channel == 0:
-            B = np.asmatrix(img)
-        elif channel == 1:
-            G = np.asmatrix(img)
-        else:
-            R = np.asmatrix(img)
-    return B, G, R
+    red = image[:, :, 2]
+    green = image[:, :, 1]
+    blue = image[:, :, 0]
+ 
+    return blue, green, red
 
 
-def logistic_map(theta, initial_value, num_iterations):
+def logistic_map(theta:float, initial_value:float, num_iterations:int) -> list:
     """
     Generate a sequence using the Logistic map.
 
@@ -167,23 +135,36 @@ def logistic_map(theta, initial_value, num_iterations):
     return sequence
 
 
-def mat_reshape(logistic_sequence):
+def reshape_sequence_to_Q(logistic_sequence: list) -> np.ndarray:
     """
-    将混沌序列转换为矩阵 Q。
+    将混沌序列转换为掩码矩阵 Q。
+    Args:
+        logistic_sequence (list of float): 混沌序列列表，其中的变量为浮点数。
+    Returns:
+        Q (np.ndarray): 掩码矩阵, 形状为 (M, N).
     """
     # 将列表转换为 NumPy 数组
     K1_array = np.array(logistic_sequence)
 
-    # 应用变换
+    # 量化：(0, 1)浮点数转换为 0-255 范围内的整数
     K1_prime = np.mod(np.round(K1_array * 10 ** 4), 256).astype(np.uint8)
 
-    # 重塑为 (M, N) 形状的矩阵 Q
+    # 一维向量重塑为 (M, N) 形状的矩阵 Q
     Q = K1_prime.reshape(M_image, N_image)
 
     return Q
 
 
-def split_into_blocks(matrix, p):
+def split_into_blocks(matrix: np.ndarray, p: int)-> list:
+    """
+    将二维矩阵拆分为一系列 p x p 的小块。
+    
+    Args:
+        matrix (np.ndarray): 图像的某个通道(W x H)
+        p (int): 每个正方形小块的变长
+    Returns:
+        blocks (list of np.ndarray): 包含所有 p x p 小块的列表.
+    """
     blocks = []
     for i in range(0, M_image, p):  # 确保不超出边界
         for j in range(0, N_image, p):
@@ -192,7 +173,7 @@ def split_into_blocks(matrix, p):
     return blocks
 
 
-def reshape_blocks(blocks, p):
+def reshape_blocks_to_channel(blocks, p):
     reshaped_matrix = np.zeros((M_image, N_image), dtype=np.uint8)
     index = 0
     for i in range(0, M_image, p):
@@ -202,16 +183,15 @@ def reshape_blocks(blocks, p):
     return reshaped_matrix
 
 
-def convert_to_8bit_binary(matrix_block_all):
+def convert_to_8bit_binary(matrix_block_all: list) -> list:
     """
     将矩阵块中的每一个整数元素转换为8位的二进制字符串。
 
     Args:
-        matrix_block_all (list of numpy.ndarray): 输入的矩阵块列表。
+        matrix_block_all (list of ny.ndarray, p x p x len): 输入的矩阵块列表。
 
     Returns:
-
-        binary_block_all (list of list): 每个元素都是8位二进制字符串的新矩阵块列表。
+        binary_block_all (list of list, p x p x len): 每个元素都是8位二进制字符串的新矩阵块列表。
 
     """
     binary_block_all = []
@@ -338,27 +318,50 @@ def dna_to_binary(dna_blocks, db, coding_rules):
 
     return binary_blocks
 
-
-def recover_image(b, g, r, path):
+def save_image(multi_channel_img: np.ndarray, path: str):
     """
-    使用全局定义的尺寸 (M_image, N_image) 重组 BGR 通道并保存图像。
-    不再依赖外部传入的 img 对象，消除了副作用。
-    """
-    # 1. 创建全新的空白画布
-    # 注意：OpenCV 图片是 (Height, Width, Channels) -> (M, N, 3)
-    # dtype=np.uint8 是必须的，确保像素值在 0-255 之间
-    img = np.zeros((M_image, N_image, 3), dtype=np.uint8)
-
-    # 2. 填充通道 (OpenCV 默认顺序为 B-G-R)
-    img[:, :, 0] = b  # Blue Channel
-    img[:, :, 1] = g  # Green Channel
-    img[:, :, 2] = r  # Red Channel
-
-    # 3. 保存并返回
-    cv2.imwrite(path, img)
-    print("image saved to:", path)
+    应对通道数可能为1或3或4的多通道图像，保存为tiff格式。
+    Args:
+        multi_channel_img (np.ndarray): 多通道图像矩阵，形状为 (M, N) 或 (M, N, C)。
+                                        默认输入为 uint8 类型，且为 BGR 顺序。
+        path (str): 保存图像的文件路径（建议以 .tif 或 .tiff 结尾）。
     
-    return img
+    Raises:
+        ValueError: 当图像通道数不是 1, 3, 或 4 时抛出。
+        IOError: 当图像保存失败时抛出。
+    """
+    
+    # 1. 检查数据维度并确定通道数
+    ndim = multi_channel_img.ndim
+    if ndim == 2:
+        # 形状为 (M, N)，视为单通道灰度图
+        channels = 1
+    elif ndim == 3:
+        # 形状为 (M, N, C)
+        channels = multi_channel_img.shape[2]
+    else:
+        raise ValueError(f"不支持的图像维度: {ndim}。图像应为 2D 或 3D 矩阵。")
+
+    # 2. 检查通道数是否符合要求 (1, 3, 4)
+    if channels not in [1, 3, 4]:
+        raise ValueError(f"不支持的通道数: {channels}。仅支持 1 (Gray), 3 (BGR), 或 4 (BGRA) 通道。")
+
+    # 3. 确保目标目录存在
+    directory = os.path.dirname(path)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory)
+
+    # 4. 保存图像
+    # cv2.imwrite 默认处理:
+    # - 1通道: 保存为灰度
+    # - 3通道: 默认为 BGR 顺序保存
+    # - 4通道: 默认为 BGRA 顺序保存
+    success = cv2.imwrite(path, multi_channel_img)
+
+    if not success:
+        raise IOError(f"图像保存失败，请检查路径是否有效或权限问题: {path}")
+
+    print(f"成功保存 {channels} 通道图像至: {path}")
 
 
 def process_array_with_kalman(arr, measurement_uncertainty=1e-2, process_variance=1e-5):
@@ -374,24 +377,32 @@ def process_array_with_kalman(arr, measurement_uncertainty=1e-2, process_varianc
     return filtered_arr
 
 
-def encrypt(master_sequence: tuple, plain_path: str, cipher_path: str, password: str = None) -> tuple:
+def encrypt(
+        master_sequence: tuple, 
+        plain_img: np.ndarray, 
+        password: str = None
+    ) -> tuple:
     x1, x2, x3, x4 = master_sequence
     # print(x1.flat[:20])
     # print(x5.flat[:20])
-    
-    plain_img = cv2.imread(plain_path)
-    if plain_img is None:
-        raise FileNotFoundError(f"Unable to load image at {plain_path}")
-    
-    blue, green, red = decompose_matrix(plain_img)  # 生成rgb M,N 1024, 1280
 
-    # 原本的初始值生成方式
+    # ===== 阶段1：Q置乱 =====
+
+    # ===== 阶段1.1：明文的通道拆分=====
+
+    blue, green, red = split_channels(plain_img)
+
+    # ===== 阶段1.2：生成掩码矩阵Q =====
+
+    # 原本的初始值生成方式：基于明文信息提取
     i1 = np.sum(red)
     i2 = np.sum(green)
-    # initial_value = (i1 + i2) / (255 * M_image * N_image * 2)  # Example initial value
-    # 带密码的初始值生成方式
     i3 = np.sum(blue)
+    # initial_value = (i1 + i2) / (255 * M_image * N_image * 2) 
+
+    # 带密码的初始值生成方式：图像信息与用户密码混合
     img_word = str(int(i1) + int(i2) + int(i3))
+
     # 检查password必须是字符串
     if isinstance(password, str):
         raw_seed_str = password + img_word
@@ -399,31 +410,31 @@ def encrypt(master_sequence: tuple, plain_path: str, cipher_path: str, password:
         raw_seed_str = img_word
     else:
         raise ValueError("Password must be a string or None.")
+    
     initial_value = string_to_initial_value(raw_seed_str)
     theta = 3.9999  # Example parameter value
     num_iterations = M_image * N_image  # Number of iterations
+
     logistic_sequence = logistic_map(theta, initial_value, num_iterations - 1)
     # print(len(logistic_sequence))
 
-    Q = mat_reshape(logistic_sequence)
+    Q = reshape_sequence_to_Q(logistic_sequence)
 
+    # ===== 阶段1.3：通道分别与Q做异或 =====
 
-    blocks_I1 = split_into_blocks(red, p)
+    blocks_I1 = split_into_blocks(blue, p)
     blocks_I2 = split_into_blocks(green, p)
-    blocks_I3 = split_into_blocks(blue, p)
+    blocks_I3 = split_into_blocks(red, p)
 
-    # 获取 Q 的子块
     blocks_Q = split_into_blocks(Q, p)
 
-    # 应用 XOR 操作
     encrypted_blocks_I1 = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(blocks_I1, blocks_Q)]
     encrypted_blocks_I2 = [np.bitwise_xor(block_I2, block_Q) for block_I2, block_Q in zip(blocks_I2, blocks_Q)]
     encrypted_blocks_I3 = [np.bitwise_xor(block_I3, block_Q) for block_I3, block_Q in zip(blocks_I3, blocks_Q)]
 
-    bin_blocks_I1 = convert_to_8bit_binary(encrypted_blocks_I1)
-    bin_blocks_I2 = convert_to_8bit_binary(encrypted_blocks_I2)
-    bin_blocks_I3 = convert_to_8bit_binary(encrypted_blocks_I3)
+    # ===== 阶段2：DNA加密 =====
 
+    # ===== 阶段2.1：将混沌序列量化到8个DNA编码规则 =====
 
     x1 = (np.mod(np.round(x1), 8) + 1).astype(np.uint8)
     x2 = (np.mod(np.round(x2), 8) + 1).astype(np.uint8)
@@ -434,7 +445,7 @@ def encrypt(master_sequence: tuple, plain_path: str, cipher_path: str, password:
         processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
         return processed_arr
 
-    # 对每个数组应用该函数
+    # 滤波与量化掺杂进行
     for i in range(15):
         x1 = process_array_with_kalman(x1)
         x2 = process_array_with_kalman(x2)
@@ -446,8 +457,12 @@ def encrypt(master_sequence: tuple, plain_path: str, cipher_path: str, password:
         x3 = process_array(x3)
         x4 = process_array(x4)
 
+    # ===== 阶段2.2：各通道转换为8位二进制字符串 =====
+    bin_blocks_I1 = convert_to_8bit_binary(encrypted_blocks_I1)
+    bin_blocks_I2 = convert_to_8bit_binary(encrypted_blocks_I2)
+    bin_blocks_I3 = convert_to_8bit_binary(encrypted_blocks_I3)
 
-    # 调用函数进行转换
+    # ===== 阶段2.3：基于DNA编解码的加密 =====
     dna_sequences_I1 = binary_to_dna(bin_blocks_I1, x1, coding_rules)
     bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x2, coding_rules)
     dna_sequences_I2 = binary_to_dna(bin_blocks_I2, x1, coding_rules)
@@ -462,25 +477,32 @@ def encrypt(master_sequence: tuple, plain_path: str, cipher_path: str, password:
     dna_sequences_I3 = binary_to_dna(bin_sequences_I3, x3, coding_rules)
     bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x4, coding_rules)
 
+    # ===== 阶段3：保存图像与生成密钥 =====
+
     dec_sequences_I1 = convert_binary_to_decimal(bin_sequences_I1)
     dec_sequences_I2 = convert_binary_to_decimal(bin_sequences_I2)
     dec_sequences_I3 = convert_binary_to_decimal(bin_sequences_I3)
 
-    I1_prime = reshape_blocks(dec_sequences_I1, p)
-    I2_prime = reshape_blocks(dec_sequences_I2, p)
-    I3_prime = reshape_blocks(dec_sequences_I3, p)
+    I1_prime = reshape_blocks_to_channel(dec_sequences_I1, p)
+    I2_prime = reshape_blocks_to_channel(dec_sequences_I2, p)
+    I3_prime = reshape_blocks_to_channel(dec_sequences_I3, p)
 
-    # recover_image(I1_prime, I2_prime, I3_prime, plain_img, cipher_path)
-    recover_image(I1_prime, I2_prime, I3_prime, cipher_path)
-
-
+    cipher_img = cv2.merge((I1_prime, I2_prime, I3_prime))
     decry_key = (img_word, initial_value)
-    return decry_key
+
+    return cipher_img, decry_key
 
 
-def decrypt(decry_key: tuple, slave_sequence: tuple, cipher_path: str, decrypted_path: str, password: str = None) -> bool:
+def decrypt(
+        slave_sequence: tuple,
+        cipher_img: np.ndarray, 
+        decry_key: tuple, 
+        password: str = None
+    ) -> tuple:
+
     # 对密钥解包
     img_word, initial_value_of_Q = decry_key
+
     # 验证用户是否输入了正确的密码
     if isinstance(password, str):
         raw_seed_str = password + img_word
@@ -491,17 +513,16 @@ def decrypt(decry_key: tuple, slave_sequence: tuple, cipher_path: str, decrypted
     expected_initial_value = string_to_initial_value(raw_seed_str)
     if not np.isclose(expected_initial_value, initial_value_of_Q):
         print("Error: Incorrect password provided for decryption.")
-        return False
+        return (False, None)
     
-    # 解包和重新生成 Q 矩阵
+    # 重新生成 Q 矩阵
     theta = 3.9999
     num_iterations = M_image * N_image  # Number of iterations
     logistic_sequence = logistic_map(theta, initial_value_of_Q, num_iterations - 1)
-    Q = mat_reshape(logistic_sequence)
+    Q = reshape_sequence_to_Q(logistic_sequence)
     blocks_Q = split_into_blocks(Q, p)
 
-    
-    # 解包混沌序列
+    # 量化混沌序列
     x5, x6, x7, x8 = slave_sequence
     
     x5 = (np.mod(np.round(x5), 8) + 1).astype(np.uint8)
@@ -510,11 +531,8 @@ def decrypt(decry_key: tuple, slave_sequence: tuple, cipher_path: str, decrypted
     x8 = (np.mod(np.round(x8), 8) + 1).astype(np.uint8)
 
     def process_array(arr):
-        # 取模运算并转换为 uint8
         processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
         return processed_arr
-
-    # 对每个数组应用该函数
 
     for i in range(15):
         x5 = process_array_with_kalman(x5)
@@ -527,77 +545,53 @@ def decrypt(decry_key: tuple, slave_sequence: tuple, cipher_path: str, decrypted
         x7 = process_array(x7)
         x8 = process_array(x8)
 
+    # 密文通道拆分
+    blue_c, green_c, red_c = split_channels(cipher_img)
 
-    
-    cipher_img = cv2.imread(cipher_path)
-    if cipher_img is None:
-        print(f"Error: Unable to load image at {cipher_path}")
-        return False
-    
+    # 分块
+    blocks_I1 = split_into_blocks(blue_c, p)
+    blocks_I2 = split_into_blocks(green_c, p)
+    blocks_I3 = split_into_blocks(red_c, p) 
 
-    blue_c, green_c, red_c = decompose_matrix(cipher_img)
+    # DNA解密
 
-    blocks_I1 = split_into_blocks(red_c, p)   # 对应 Red
-    blocks_I2 = split_into_blocks(green_c, p) # 对应 Green
-    blocks_I3 = split_into_blocks(blue_c, p)  # 对应 Blue
-
+    # 转换为8位二进制字符串
     bin_blocks_I1 = convert_to_8bit_binary(blocks_I1)
     bin_blocks_I2 = convert_to_8bit_binary(blocks_I2)
     bin_blocks_I3 = convert_to_8bit_binary(blocks_I3)
 
-
-    # bin_blocks_I1 = convert_to_8bit_binary(dec_sequences_I1)
-    # bin_blocks_I2 = convert_to_8bit_binary(dec_sequences_I2)
-    # bin_blocks_I3 = convert_to_8bit_binary(dec_sequences_I3)
-
-    # 调用函数进行转换
+    # 基于DNA编解码的解密
     dna_sequences_I1 = binary_to_dna(bin_blocks_I1, x8, coding_rules)
     bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x7, coding_rules)
-
     dna_sequences_I2 = binary_to_dna(bin_blocks_I2, x8, coding_rules)
     bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x7, coding_rules)
-
     dna_sequences_I3 = binary_to_dna(bin_blocks_I3, x8, coding_rules)
     bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x7, coding_rules)
 
-
-    # 调用函数进行转换
     dna_sequences_I1 = binary_to_dna(bin_sequences_I1, x6, coding_rules)
     bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x5, coding_rules)
-
     dna_sequences_I2 = binary_to_dna(bin_sequences_I2, x6, coding_rules)
     bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x5, coding_rules)
-
     dna_sequences_I3 = binary_to_dna(bin_sequences_I3, x6, coding_rules)
     bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x5, coding_rules)
 
-    dec_sequences_I1 = convert_binary_to_decimal(bin_sequences_I1)
-    dec_sequences_I2 = convert_binary_to_decimal(bin_sequences_I2)
-    dec_sequences_I3 = convert_binary_to_decimal(bin_sequences_I3)
-
-    I1_reshape = reshape_blocks(dec_sequences_I1, p)
-    I2_reshape = reshape_blocks(dec_sequences_I2, p)
-    I3_reshape = reshape_blocks(dec_sequences_I3, p)
-
-    # testdna(encrypted_blocks_I2, dec_sequences_I2)
-
-    blocks_I1 = split_into_blocks(I1_reshape, p)
-    blocks_I2 = split_into_blocks(I2_reshape, p)
-    blocks_I3 = split_into_blocks(I3_reshape, p)
+    # 转换回十进制整数
+    blocks_I1 = convert_binary_to_decimal(bin_sequences_I1)
+    blocks_I2 = convert_binary_to_decimal(bin_sequences_I2)
+    blocks_I3 = convert_binary_to_decimal(bin_sequences_I3)
 
     # # 应用 XOR 操作
     dncrypted_blocks_I1 = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(blocks_I1, blocks_Q)]
     dncrypted_blocks_I2 = [np.bitwise_xor(block_I2, block_Q) for block_I2, block_Q in zip(blocks_I2, blocks_Q)]
     dncrypted_blocks_I3 = [np.bitwise_xor(block_I3, block_Q) for block_I3, block_Q in zip(blocks_I3, blocks_Q)]
 
-    I1_prime = reshape_blocks(dncrypted_blocks_I1, p)
-    I2_prime = reshape_blocks(dncrypted_blocks_I2, p)
-    I3_prime = reshape_blocks(dncrypted_blocks_I3, p)
-    
-    # recover_image(I1_prime, I2_prime, I3_prime, cipher_img, decrypted_path)
-    recover_image(I1_prime, I2_prime, I3_prime, decrypted_path)
+    I1_prime = reshape_blocks_to_channel(dncrypted_blocks_I1, p)
+    I2_prime = reshape_blocks_to_channel(dncrypted_blocks_I2, p)
+    I3_prime = reshape_blocks_to_channel(dncrypted_blocks_I3, p)
 
-    return True
+    decrypted_img = cv2.merge((I1_prime, I2_prime, I3_prime))
+
+    return (True, decrypted_img)
 
 
 def generate(num: int):
@@ -706,11 +700,26 @@ def check_decryption_psnr(plain_path: str, decrypted_path: str):
 def encrypt_and_decrypt_once(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None, password: str = None):
     if plain_path is None or cipher_path is None or decrypted_path is None:
         raise ValueError("File paths cannot be None.")
+    
     master_sequence, slave_sequence = generate_seed()
-    decry_key = encrypt(master_sequence, plain_path, cipher_path, password)
-    if not decrypt(decry_key, slave_sequence, cipher_path, decrypted_path, password=password):
-        print("Error: Decryption process failed due to incorrect password or other issues.")
+        
+    plain_img = cv2.imread(plain_path)
+    if plain_img is None:
+        raise FileNotFoundError(f"Unable to load image at {plain_path}")
+
+    # 加密
+    cipher_img, decry_key = encrypt(master_sequence, plain_img, password)
+    save_image(cipher_img, cipher_path)
+
+    # 解密
+    is_success, decry_img = decrypt(slave_sequence, cipher_img, decry_key, password)
+    print("Decryption attempt completed.")
+    if not is_success:
+        print("Error: Decryption failed due to incorrect password.")
         return False
+    save_image(decry_img, decrypted_path)
+
+    # 验证解密结果
     if check_decryption_psnr(plain_path, decrypted_path):
         print("Decryption successful: The decrypted image matches the original.")
         if not check_decryption_pixel(plain_path, decrypted_path):
@@ -735,7 +744,6 @@ def encrypt_and_decrypt(plain_path: str = None, cipher_path: str = None, decrypt
             raise Exception("Decryption failed after 10 attempts.")
             
 
-import os
 def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
     """
     遍历 source_dir 下的所有 png 图片，进行加密和解密，
@@ -799,6 +807,7 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
                 count_processed += 1
             except Exception as e:
                 print(f"[ERROR] Failed to process {file_name}. Reason: {str(e)}")
+                traceback.print_exc()
     
     print("-" * 40)
     print(f"Batch task finished. New Processed: {count_processed}, Skipped: {count_skipped}.")
