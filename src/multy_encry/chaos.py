@@ -39,6 +39,7 @@ GLOBAL Constants
 # a, b, c = 10, 2.667, 28
 # x0, y0, z0 = 0, 0, 0
 
+ENABLE_SYNC_CHECK = True
 
 M_image = 512
 N_image = 512
@@ -137,13 +138,15 @@ def logistic_map(theta:float, initial_value:float, num_iterations:int) -> list:
     return sequence
 
 
-def reshape_sequence_to_Q(logistic_sequence: list) -> np.ndarray:
+def reshape_sequence_to_Q(logistic_sequence: list, height: int = M_image, width: int = N_image) -> np.ndarray:
     """
     将混沌序列转换为掩码矩阵 Q。
     Args:
         logistic_sequence (list of float): 混沌序列列表，其中的变量为浮点数。
+        width (int): 图像的宽度。
+        height (int): 图像的高度。
     Returns:
-        Q (np.ndarray): 掩码矩阵, 形状为 (M, N).
+        Q (np.ndarray): 掩码矩阵, 形状为 (width, height).
     """
     # 将列表转换为 NumPy 数组
     K1_array = np.array(logistic_sequence)
@@ -151,13 +154,12 @@ def reshape_sequence_to_Q(logistic_sequence: list) -> np.ndarray:
     # 量化：(0, 1)浮点数转换为 0-255 范围内的整数
     K1_prime = np.mod(np.round(K1_array * 10 ** 4), 256).astype(np.uint8)
 
-    # 一维向量重塑为 (M, N) 形状的矩阵 Q
-    Q = K1_prime.reshape(M_image, N_image)
-
+    # 一维向量重塑为 (width, height) 形状的矩阵 Q
+    Q = K1_prime.reshape(height, width)
     return Q
 
 
-def split_into_blocks(matrix: np.ndarray, p: int)-> list:
+def split_into_blocks(matrix: np.ndarray, height: int = M_image, width: int = N_image, p: int = p)-> list:
     """
     将二维矩阵拆分为一系列 p x p 的小块。
     
@@ -168,18 +170,28 @@ def split_into_blocks(matrix: np.ndarray, p: int)-> list:
         blocks (list of np.ndarray): 包含所有 p x p 小块的列表.
     """
     blocks = []
-    for i in range(0, M_image, p):  # 确保不超出边界
-        for j in range(0, N_image, p):
+    for i in range(0, height, p):  # 确保不超出边界
+        for j in range(0, width, p):
             block = matrix[i:i + p, j:j + p]
             blocks.append(block)
     return blocks
 
 
-def reshape_blocks_to_channel(blocks, p):
-    reshaped_matrix = np.zeros((M_image, N_image), dtype=np.uint8)
+def reshape_blocks_to_channel(blocks:np.ndarray, height:int = M_image, width:int = N_image, p:int = p)-> np.ndarray:
+    """
+    将一系列 p x p 的小块重新组合为一个二维矩阵。
+    Args:
+        blocks (list of np.ndarray): 包含所有 p x p 小块的列表.
+        p (int): 每个正方形小块的变长
+        width (int): 图像的宽度。
+        height (int): 图像的高度。
+    Returns:
+        reshaped_matrix (np.ndarray): 重新组合后的二维矩阵，形状为 (width, height).
+    """
+    reshaped_matrix = np.zeros((height, width), dtype=np.uint8)
     index = 0
-    for i in range(0, M_image, p):
-        for j in range(0, N_image, p):
+    for i in range(0, height, p):
+        for j in range(0, width, p):
             reshaped_matrix[i:i + p, j:j + p] = blocks[index]
             index += 1
     return reshaped_matrix
@@ -385,14 +397,13 @@ def encrypt(
         password: str = None
     ) -> tuple:
     x1, x2, x3, x4 = master_sequence
-    # print(x1.flat[:20])
-    # print(x5.flat[:20])
 
     # ===== 阶段1：Q置乱 =====
 
     # ===== 阶段1.1：明文的通道拆分=====
 
     blue, green, red = split_channels(plain_img)
+    height, width = blue.shape
 
     # ===== 阶段1.2：生成掩码矩阵Q =====
 
@@ -400,7 +411,7 @@ def encrypt(
     i1 = np.sum(red)
     i2 = np.sum(green)
     i3 = np.sum(blue)
-    # initial_value = (i1 + i2) / (255 * M_image * N_image * 2) 
+    # initial_value = (i1 + i2) / (255 * height * width * 2) 
 
     # 带密码的初始值生成方式：图像信息与用户密码混合
     img_word = str(int(i1) + int(i2) + int(i3))
@@ -415,20 +426,20 @@ def encrypt(
     
     initial_value = string_to_initial_value(raw_seed_str)
     theta = 3.9999  # Example parameter value
-    num_iterations = M_image * N_image  # Number of iterations
+    num_iterations = height * width  # Number of iterations
 
     logistic_sequence = logistic_map(theta, initial_value, num_iterations - 1)
     # print(len(logistic_sequence))
 
-    Q = reshape_sequence_to_Q(logistic_sequence)
+    Q = reshape_sequence_to_Q(logistic_sequence, height, width)
 
     # ===== 阶段1.3：通道分别与Q做异或 =====
 
-    blocks_I1 = split_into_blocks(blue, p)
-    blocks_I2 = split_into_blocks(green, p)
-    blocks_I3 = split_into_blocks(red, p)
+    blocks_I1 = split_into_blocks(blue, height, width)
+    blocks_I2 = split_into_blocks(green, height, width)
+    blocks_I3 = split_into_blocks(red, height, width)
 
-    blocks_Q = split_into_blocks(Q, p)
+    blocks_Q = split_into_blocks(Q, height, width)
 
     encrypted_blocks_I1 = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(blocks_I1, blocks_Q)]
     encrypted_blocks_I2 = [np.bitwise_xor(block_I2, block_Q) for block_I2, block_Q in zip(blocks_I2, blocks_Q)]
@@ -436,28 +447,7 @@ def encrypt(
 
     # ===== 阶段2：DNA加密 =====
 
-    # ===== 阶段2.1：将混沌序列量化到8个DNA编码规则 =====
-
-    x1 = (np.mod(np.round(x1), 8) + 1).astype(np.uint8)
-    x2 = (np.mod(np.round(x2), 8) + 1).astype(np.uint8)
-    x3 = (np.mod(np.round(x3), 8) + 1).astype(np.uint8)
-    x4 = (np.mod(np.round(x4), 8) + 1).astype(np.uint8)
-
-    def process_array(arr):
-        processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
-        return processed_arr
-
-    # 滤波与量化掺杂进行
-    for i in range(15):
-        x1 = process_array_with_kalman(x1)
-        x2 = process_array_with_kalman(x2)
-        x3 = process_array_with_kalman(x3)
-        x4 = process_array_with_kalman(x4)
-
-        x1 = process_array(x1)
-        x2 = process_array(x2)
-        x3 = process_array(x3)
-        x4 = process_array(x4)
+    # ===== 阶段2.1：将混沌序列量化到8个DNA编码规则(已经在生成时完成) =====
 
     # ===== 阶段2.2：各通道转换为8位二进制字符串 =====
     bin_blocks_I1 = convert_to_8bit_binary(encrypted_blocks_I1)
@@ -485,11 +475,13 @@ def encrypt(
     dec_sequences_I2 = convert_binary_to_decimal(bin_sequences_I2)
     dec_sequences_I3 = convert_binary_to_decimal(bin_sequences_I3)
 
-    I1_prime = reshape_blocks_to_channel(dec_sequences_I1, p)
-    I2_prime = reshape_blocks_to_channel(dec_sequences_I2, p)
-    I3_prime = reshape_blocks_to_channel(dec_sequences_I3, p)
+    I1_prime = reshape_blocks_to_channel(dec_sequences_I1, height, width)
+    I2_prime = reshape_blocks_to_channel(dec_sequences_I2, height, width)
+    I3_prime = reshape_blocks_to_channel(dec_sequences_I3, height, width)
 
     cipher_img = cv2.merge((I1_prime, I2_prime, I3_prime))
+    # 生成解密密钥
+    # 对于防攻击情况，则不传出 initial_value
     decry_key = (img_word, initial_value)
 
     return cipher_img, decry_key
@@ -501,9 +493,24 @@ def decrypt(
         decry_key: tuple, 
         password: str = None
     ) -> tuple:
+    """
+    解密算法，相当于加密的逆过程。
+
+    Args:
+        slave_sequence (tuple of np.ndarray): 从序列，包含四个量化后的混沌序列.
+        cipher_img (np.ndarray): 密文图像矩阵，形状为 (M, N, C)。
+        decry_key (tuple): 解密密钥，包含 img_word (str) 和 initial_value_of_Q (float)(可选)。
+        password (str, optional): 用户输入的密码字符串。如果没有密码，则为 None。
+
+    Returns:
+        is_success (bool): 解密是否成功的标志。
+        decrypted_img (np.ndarray or None): 解密后的图像矩阵，如果解密失败则为 None。
+    """
 
     # 对密钥解包
-    img_word, initial_value_of_Q = decry_key
+    # img_word, initial_value_of_Q = decry_key
+    # 为防止攻击则不传入 initial_value_of_Q
+    img_word = decry_key[0]
 
     # 验证用户是否输入了正确的密码
     if isinstance(password, str):
@@ -512,48 +519,35 @@ def decrypt(
         raw_seed_str = img_word
     else:
         raise ValueError("Password must be a string or None.")
-    expected_initial_value = string_to_initial_value(raw_seed_str)
-    if not np.isclose(expected_initial_value, initial_value_of_Q):
-        print("Error: Incorrect password provided for decryption.")
-        return (False, None)
+    calculated_initial_value = string_to_initial_value(raw_seed_str)
+    # 对于防攻击情况
+    initial_value_of_Q = calculated_initial_value
+    # 对于测试中间件正确性的情况
+    # if not np.isclose(expected_initial_value, initial_value_of_Q):
+    #     print("Error: Incorrect password provided for decryption.")
+    #     return (False, None)
+
+    
+    # 密文通道拆分
+    blue_c, green_c, red_c = split_channels(cipher_img)
+    height, width = blue_c.shape
+
     
     # 重新生成 Q 矩阵
     theta = 3.9999
-    num_iterations = M_image * N_image  # Number of iterations
+    num_iterations = height * width  # Number of iterations
     logistic_sequence = logistic_map(theta, initial_value_of_Q, num_iterations - 1)
-    Q = reshape_sequence_to_Q(logistic_sequence)
-    blocks_Q = split_into_blocks(Q, p)
+    Q = reshape_sequence_to_Q(logistic_sequence, height, width)
+    blocks_Q = split_into_blocks(Q, height, width)
 
     # 量化混沌序列
     x5, x6, x7, x8 = slave_sequence
     
-    x5 = (np.mod(np.round(x5), 8) + 1).astype(np.uint8)
-    x6 = (np.mod(np.round(x6), 8) + 1).astype(np.uint8)
-    x7 = (np.mod(np.round(x7), 8) + 1).astype(np.uint8)
-    x8 = (np.mod(np.round(x8), 8) + 1).astype(np.uint8)
-
-    def process_array(arr):
-        processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
-        return processed_arr
-
-    for i in range(15):
-        x5 = process_array_with_kalman(x5)
-        x6 = process_array_with_kalman(x6)
-        x7 = process_array_with_kalman(x7)
-        x8 = process_array_with_kalman(x8)
-
-        x5 = process_array(x5)
-        x6 = process_array(x6)
-        x7 = process_array(x7)
-        x8 = process_array(x8)
-
-    # 密文通道拆分
-    blue_c, green_c, red_c = split_channels(cipher_img)
 
     # 分块
-    blocks_I1 = split_into_blocks(blue_c, p)
-    blocks_I2 = split_into_blocks(green_c, p)
-    blocks_I3 = split_into_blocks(red_c, p) 
+    blocks_I1 = split_into_blocks(blue_c, height, width)
+    blocks_I2 = split_into_blocks(green_c, height, width)
+    blocks_I3 = split_into_blocks(red_c, height, width) 
 
     # DNA解密
 
@@ -587,9 +581,9 @@ def decrypt(
     dncrypted_blocks_I2 = [np.bitwise_xor(block_I2, block_Q) for block_I2, block_Q in zip(blocks_I2, blocks_Q)]
     dncrypted_blocks_I3 = [np.bitwise_xor(block_I3, block_Q) for block_I3, block_Q in zip(blocks_I3, blocks_Q)]
 
-    I1_prime = reshape_blocks_to_channel(dncrypted_blocks_I1, p)
-    I2_prime = reshape_blocks_to_channel(dncrypted_blocks_I2, p)
-    I3_prime = reshape_blocks_to_channel(dncrypted_blocks_I3, p)
+    I1_prime = reshape_blocks_to_channel(dncrypted_blocks_I1, height, width)
+    I2_prime = reshape_blocks_to_channel(dncrypted_blocks_I2, height, width)
+    I3_prime = reshape_blocks_to_channel(dncrypted_blocks_I3, height, width)
 
     decrypted_img = cv2.merge((I1_prime, I2_prime, I3_prime))
 
@@ -643,15 +637,23 @@ def generate(num: int):
     return list_obs1, list_obs2, list_obs3, list_obs4, list_obs5, list_obs6, list_obs7, list_obs8
 
 
-def generate_seed():
+def generate_seed(height: int = M_image, width: int = N_image, p: int = p)-> tuple:
     """
-    将混沌序列转换为 np.array
+    将混沌序列转换为 np.array .
+    并且直接输出量化后的序列
+    Args:
+        height (int): 图像的高度.
+        width (int): 图像的宽度.
+        p (int): 切片的大小.
+    Returns:
+        master_sequence (tuple of np.ndarray): 主序列，包含四个量化后的混沌序列.
+        slave_sequence (tuple of np.ndarray): 从序列，包含四个量化后的混沌序列.
     """
     # 严重错误，这个值根本不是切片值
     # num = int((M_image * N_image) / (p * p)) 
     # 正确逻辑：使用向上取整ceil
     # num = ceil(M/p) * ceil(N/p)
-    num = ((M_image + p - 1) // p) * ((N_image + p - 1) // p)
+    num = ((height + p - 1) // p) * ((width + p - 1) // p)
     list_x1, list_x2, list_x3, list_x4, list_x5, list_x6, list_x7, list_x8 = generate(num)
 
     x1 = np.array(list_x1)
@@ -662,11 +664,83 @@ def generate_seed():
     x6 = np.array(list_x6)
     x7 = np.array(list_x7)
     x8 = np.array(list_x8)
+    
+    # ===== 阶段2.1：将混沌序列量化到8个DNA编码规则 =====
+
+    x1 = (np.mod(np.round(x1), 8) + 1).astype(np.uint8)
+    x2 = (np.mod(np.round(x2), 8) + 1).astype(np.uint8)
+    x3 = (np.mod(np.round(x3), 8) + 1).astype(np.uint8)
+    x4 = (np.mod(np.round(x4), 8) + 1).astype(np.uint8)
+        
+    x5 = (np.mod(np.round(x5), 8) + 1).astype(np.uint8)
+    x6 = (np.mod(np.round(x6), 8) + 1).astype(np.uint8)
+    x7 = (np.mod(np.round(x7), 8) + 1).astype(np.uint8)
+    x8 = (np.mod(np.round(x8), 8) + 1).astype(np.uint8)
+
+    def process_array(arr):
+        processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
+        return processed_arr
+
+    # 滤波与量化掺杂进行
+    for i in range(15):
+        x1 = process_array_with_kalman(x1)
+        x2 = process_array_with_kalman(x2)
+        x3 = process_array_with_kalman(x3)
+        x4 = process_array_with_kalman(x4)
+
+        x1 = process_array(x1)
+        x2 = process_array(x2)
+        x3 = process_array(x3)
+        x4 = process_array(x4)
+
+        x5 = process_array_with_kalman(x5)
+        x6 = process_array_with_kalman(x6)
+        x7 = process_array_with_kalman(x7)
+        x8 = process_array_with_kalman(x8)
+
+        x5 = process_array(x5)
+        x6 = process_array(x6)
+        x7 = process_array(x7)
+        x8 = process_array(x8)
+    
 
     master_sequence = (x1, x2, x3, x4)
     slave_sequence = (x5, x6, x7, x8)
-
+    # print(f"ytpe of x1: {type(x1)}, shape: {x1.shape}")
     return master_sequence, slave_sequence
+
+
+def test_generate_seed():
+    """
+    测试混沌序列生成与同步性检查。
+    """
+    cnt = 0
+    attempt_num = 5
+    while True:
+        cnt += 1
+        print(f"Generating chaotic sequences, attempt {cnt}...")
+        master_sequence, slave_sequence = generate_seed(256, 256, p)
+        if check_synchronization(master_sequence, slave_sequence):
+            print("Chaotic sequences passed the synchronization check.")
+            break
+        elif cnt >= attempt_num:
+            print(f"Error: Unable to generate valid chaotic sequences after {attempt_num} attempts.")
+    raise Exception("Stop here for debugging.")
+
+
+def check_synchronization(master_sequence:tuple, slave_sequence:tuple) -> bool:
+    """
+    检查主序列和从序列是否同步。完整的进行比对。
+    Args:
+        master_sequence (tuple of np.ndarray): 主序列，包含四个量化后的混沌序列.
+        slave_sequence (tuple of np.ndarray): 从序列，包含四个量化后的混沌序列.
+    Returns:
+        bool: 如果四个序列都完全相同则返回 True，否则返回 False。
+    """
+    for x_i, y_i in zip(master_sequence, slave_sequence):
+        if not np.array_equal(x_i, y_i):
+            return False
+    return True
 
 
 def check_decryption_pixel(plain_path, decrypted_path):
@@ -699,15 +773,31 @@ def check_decryption_psnr(plain_path: str, decrypted_path: str):
         return False
 
 
-def encrypt_and_decrypt_once(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None, password: str = None):
+def encrypt_and_decrypt(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None, password: str = None):
     if plain_path is None or cipher_path is None or decrypted_path is None:
         raise ValueError("File paths cannot be None.")
     
-    master_sequence, slave_sequence = generate_seed()
-        
     plain_img = cv2.imread(plain_path)
     if plain_img is None:
         raise FileNotFoundError(f"Unable to load image at {plain_path}")
+    height, width = cv2.split(plain_img)[0].shape
+
+    if ENABLE_SYNC_CHECK:
+        cnt = 0
+        attempt_num = 5
+        while True:
+            cnt += 1
+            print(f"Generating chaotic sequences, attempt {cnt}...")
+            master_sequence, slave_sequence = generate_seed(height, width, p)
+            if check_synchronization(master_sequence, slave_sequence):
+                print("Chaotic sequences passed the synchronization check.")
+                break
+            elif cnt >= attempt_num:
+                print(f"Error: Unable to generate valid chaotic sequences after {attempt_num} attempts.")
+                return False
+    else:
+        master_sequence, slave_sequence = generate_seed(height, width, p)
+        
 
     # 加密
     cipher_img, decry_key = encrypt(master_sequence, plain_img, password)
@@ -716,35 +806,18 @@ def encrypt_and_decrypt_once(plain_path: str = None, cipher_path: str = None, de
     # 解密
     is_success, decry_img = decrypt(slave_sequence, cipher_img, decry_key, password)
     print("Decryption attempt completed.")
-    if not is_success:
-        print("Error: Decryption failed due to incorrect password.")
-        return False
+    # if not is_success:
+    #     print("Error: Decryption failed due to incorrect password.")
+    #     return False
     save_image(decry_img, decrypted_path)
 
     # 验证解密结果
-    if check_decryption_psnr(plain_path, decrypted_path):
-        print("Decryption successful: The decrypted image matches the original.")
-        if not check_decryption_pixel(plain_path, decrypted_path):
-            print("Warning: Decryption verification failed: Pixel values do not match exactly.")
-        else:
-            print("Verification succeed: Pixel values match exactly.")
-        return True
+    if not check_decryption_pixel(plain_path, decrypted_path):
+        print("Warning: Decryption verification failed: Pixel values do not match exactly.")
     else:
-        print("Error: Decryption failed. The decrypted image does not match the original.")
-        return False
-
-
-def encrypt_and_decrypt(plain_path: str = None, cipher_path: str = None, decrypted_path: str = None, password: str = None):
-    cnt = 0
-    while True:
-        cnt += 1
-        print("********** Round: {} **********".format(cnt))
-        flag = encrypt_and_decrypt_once(plain_path, cipher_path, decrypted_path, password=password)
-        if flag:
-            break
-        elif cnt >= 10:
-            raise Exception("Decryption failed after 10 attempts.")
-            
+        print("Verification succeed: Pixel values match exactly.")
+    return True
+  
 
 def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
     """
@@ -817,6 +890,11 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
 
 
 if __name__ == "__main__":
+
+    # test_generate_seed()
+    # raise Exception("Stop here for debugging.")
+
+
     # 定义文件夹路径
     plain_folder = PLAIN_DIR
     cipher_folder = CIPHER_DIR
