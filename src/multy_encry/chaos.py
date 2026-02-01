@@ -159,7 +159,7 @@ def reshape_sequence_to_Q(logistic_sequence: list, height: int = M_image, width:
     return Q
 
 
-def split_into_blocks(matrix: np.ndarray, height: int = M_image, width: int = N_image, p: int = p)-> list:
+def split_into_blocks(matrix: np.ndarray, p: int = p)-> list:
     """
     将二维矩阵拆分为一系列 p x p 的小块。
     
@@ -170,6 +170,7 @@ def split_into_blocks(matrix: np.ndarray, height: int = M_image, width: int = N_
         blocks (list of np.ndarray): 包含所有 p x p 小块的列表.
     """
     blocks = []
+    height, width = matrix.shape
     for i in range(0, height, p):  # 确保不超出边界
         for j in range(0, width, p):
             block = matrix[i:i + p, j:j + p]
@@ -402,15 +403,15 @@ def encrypt(
 
     # ===== 阶段1.1：明文的通道拆分=====
 
-    blue, green, red = split_channels(plain_img)
-    height, width = blue.shape
+    channels = cv2.split(plain_img)
+    height, width = plain_img.shape[:2]
 
     # ===== 阶段1.2：生成掩码矩阵Q =====
 
     # 原本的初始值生成方式：基于明文信息提取
-    i1 = np.sum(red)
-    i2 = np.sum(green)
-    i3 = np.sum(blue)
+    i1 = np.sum(channels[0])  # blue
+    i2 = np.sum(channels[1])  # green
+    i3 = np.sum(channels[2])  # red
     # initial_value = (i1 + i2) / (255 * height * width * 2) 
 
     # 带密码的初始值生成方式：图像信息与用户密码混合
@@ -435,51 +436,66 @@ def encrypt(
 
     # ===== 阶段1.3：通道分别与Q做异或 =====
 
-    blocks_I1 = split_into_blocks(blue, height, width)
-    blocks_I2 = split_into_blocks(green, height, width)
-    blocks_I3 = split_into_blocks(red, height, width)
+    # blocks_I1 = split_into_blocks(blue, height, width)
+    # blocks_I2 = split_into_blocks(green, height, width)
+    # blocks_I3 = split_into_blocks(red, height, width)
+    channels_blocks = [split_into_blocks(ch) for ch in channels]
+    blocks_Q = split_into_blocks(Q)
 
-    blocks_Q = split_into_blocks(Q, height, width)
+    # encrypted_blocks_I1 = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(blocks_I1, blocks_Q)]
+    # encrypted_blocks_I2 = [np.bitwise_xor(block_I2, block_Q) for block_I2, block_Q in zip(blocks_I2, blocks_Q)]
+    # encrypted_blocks_I3 = [np.bitwise_xor(block_I3, block_Q) for block_I3, block_Q in zip(blocks_I3, blocks_Q)]
 
-    encrypted_blocks_I1 = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(blocks_I1, blocks_Q)]
-    encrypted_blocks_I2 = [np.bitwise_xor(block_I2, block_Q) for block_I2, block_Q in zip(blocks_I2, blocks_Q)]
-    encrypted_blocks_I3 = [np.bitwise_xor(block_I3, block_Q) for block_I3, block_Q in zip(blocks_I3, blocks_Q)]
+    diffused_channels = []
+    for blocks_I in channels_blocks:
+        diffused_channel = [np.bitwise_xor(block_I, block_Q) for block_I, block_Q in zip(blocks_I, blocks_Q)]
+        diffused_channels.append(diffused_channel)
+
 
     # ===== 阶段2：DNA加密 =====
 
     # ===== 阶段2.1：将混沌序列量化到8个DNA编码规则(已经在生成时完成) =====
 
     # ===== 阶段2.2：各通道转换为8位二进制字符串 =====
-    bin_blocks_I1 = convert_to_8bit_binary(encrypted_blocks_I1)
-    bin_blocks_I2 = convert_to_8bit_binary(encrypted_blocks_I2)
-    bin_blocks_I3 = convert_to_8bit_binary(encrypted_blocks_I3)
+    # bin_blocks_I1 = convert_to_8bit_binary(encrypted_blocks_I1)
+    # bin_blocks_I2 = convert_to_8bit_binary(encrypted_blocks_I2)
+    # bin_blocks_I3 = convert_to_8bit_binary(encrypted_blocks_I3)
+    bin_channels = [convert_to_8bit_binary(ch) for ch in diffused_channels]
 
     # ===== 阶段2.3：基于DNA编解码的加密 =====
-    dna_sequences_I1 = binary_to_dna(bin_blocks_I1, x1, coding_rules)
-    bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x2, coding_rules)
-    dna_sequences_I2 = binary_to_dna(bin_blocks_I2, x1, coding_rules)
-    bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x2, coding_rules)
-    dna_sequences_I3 = binary_to_dna(bin_blocks_I3, x1, coding_rules)
-    bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x2, coding_rules)
+    # dna_sequences_I1 = binary_to_dna(bin_blocks_I1, x1, coding_rules)
+    # bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x2, coding_rules)
+    # dna_sequences_I2 = binary_to_dna(bin_blocks_I2, x1, coding_rules)
+    # bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x2, coding_rules)
+    # dna_sequences_I3 = binary_to_dna(bin_blocks_I3, x1, coding_rules)
+    # bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x2, coding_rules)
+    # dna_sequences_I1 = binary_to_dna(bin_sequences_I1, x3, coding_rules)
+    # bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x4, coding_rules)
+    # dna_sequences_I2 = binary_to_dna(bin_sequences_I2, x3, coding_rules)
+    # bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x4, coding_rules)
+    # dna_sequences_I3 = binary_to_dna(bin_sequences_I3, x3, coding_rules)
+    # bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x4, coding_rules)
 
-    dna_sequences_I1 = binary_to_dna(bin_sequences_I1, x3, coding_rules)
-    bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x4, coding_rules)
-    dna_sequences_I2 = binary_to_dna(bin_sequences_I2, x3, coding_rules)
-    bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x4, coding_rules)
-    dna_sequences_I3 = binary_to_dna(bin_sequences_I3, x3, coding_rules)
-    bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x4, coding_rules)
+    dna_channels = [binary_to_dna(bin_ch, x1, coding_rules) for bin_ch in bin_channels]
+    bin_channels = [dna_to_binary(dna_ch, x2, coding_rules) for dna_ch in dna_channels]
+    dna_channels = [binary_to_dna(bin_ch, x3, coding_rules) for bin_ch in bin_channels]
+    bin_channels = [dna_to_binary(dna_ch, x4, coding_rules) for dna_ch in dna_channels]
 
     # ===== 阶段3：保存图像与生成密钥 =====
 
-    dec_sequences_I1 = convert_binary_to_decimal(bin_sequences_I1)
-    dec_sequences_I2 = convert_binary_to_decimal(bin_sequences_I2)
-    dec_sequences_I3 = convert_binary_to_decimal(bin_sequences_I3)
+    # dec_sequences_I1 = convert_binary_to_decimal(bin_sequences_I1)
+    # dec_sequences_I2 = convert_binary_to_decimal(bin_sequences_I2)
+    # dec_sequences_I3 = convert_binary_to_decimal(bin_sequences_I3)
 
-    I1_prime = reshape_blocks_to_channel(dec_sequences_I1, height, width)
-    I2_prime = reshape_blocks_to_channel(dec_sequences_I2, height, width)
-    I3_prime = reshape_blocks_to_channel(dec_sequences_I3, height, width)
+    channels_blocks = [convert_binary_to_decimal(bin_ch) for bin_ch in bin_channels]
 
-    cipher_img = cv2.merge((I1_prime, I2_prime, I3_prime))
+    # I1_prime = reshape_blocks_to_channel(dec_sequences_I1, height, width)
+    # I2_prime = reshape_blocks_to_channel(dec_sequences_I2, height, width)
+    # I3_prime = reshape_blocks_to_channel(dec_sequences_I3, height, width)
+
+    channels = [reshape_blocks_to_channel(ch, height, width) for ch in channels_blocks]
+
+    cipher_img = cv2.merge(channels)
     # 生成解密密钥
     # 对于防攻击情况，则不传出 initial_value
     decry_key = (img_word, initial_value)
@@ -529,63 +545,77 @@ def decrypt(
 
     
     # 密文通道拆分
-    blue_c, green_c, red_c = split_channels(cipher_img)
-    height, width = blue_c.shape
-
+    # blue_c, green_c, red_c = split_channels(cipher_img)
+    # height, width = blue_c.shape
+    cipher_channels = cv2.split(cipher_img)
+    height, width = cipher_img.shape[:2]
     
     # 重新生成 Q 矩阵
     theta = 3.9999
     num_iterations = height * width  # Number of iterations
     logistic_sequence = logistic_map(theta, initial_value_of_Q, num_iterations - 1)
     Q = reshape_sequence_to_Q(logistic_sequence, height, width)
-    blocks_Q = split_into_blocks(Q, height, width)
+    blocks_Q = split_into_blocks(Q)
 
     # 量化混沌序列
     x5, x6, x7, x8 = slave_sequence
     
-
     # 分块
-    blocks_I1 = split_into_blocks(blue_c, height, width)
-    blocks_I2 = split_into_blocks(green_c, height, width)
-    blocks_I3 = split_into_blocks(red_c, height, width) 
+    # blocks_I1 = split_into_blocks(blue_c, height, width)
+    # blocks_I2 = split_into_blocks(green_c, height, width)
+    # blocks_I3 = split_into_blocks(red_c, height, width) 
+    cipher_channel_blocks = [split_into_blocks(ch) for ch in cipher_channels]
 
     # DNA解密
 
     # 转换为8位二进制字符串
-    bin_blocks_I1 = convert_to_8bit_binary(blocks_I1)
-    bin_blocks_I2 = convert_to_8bit_binary(blocks_I2)
-    bin_blocks_I3 = convert_to_8bit_binary(blocks_I3)
+    # bin_blocks_I1 = convert_to_8bit_binary(blocks_I1)
+    # bin_blocks_I2 = convert_to_8bit_binary(blocks_I2)
+    # bin_blocks_I3 = convert_to_8bit_binary(blocks_I3)
+    bin_channel_blocks = [convert_to_8bit_binary(ch) for ch in cipher_channel_blocks]
 
     # 基于DNA编解码的解密
-    dna_sequences_I1 = binary_to_dna(bin_blocks_I1, x8, coding_rules)
-    bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x7, coding_rules)
-    dna_sequences_I2 = binary_to_dna(bin_blocks_I2, x8, coding_rules)
-    bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x7, coding_rules)
-    dna_sequences_I3 = binary_to_dna(bin_blocks_I3, x8, coding_rules)
-    bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x7, coding_rules)
+    # dna_sequences_I1 = binary_to_dna(bin_blocks_I1, x8, coding_rules)
+    # bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x7, coding_rules)
+    # dna_sequences_I2 = binary_to_dna(bin_blocks_I2, x8, coding_rules)
+    # bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x7, coding_rules)
+    # dna_sequences_I3 = binary_to_dna(bin_blocks_I3, x8, coding_rules)
+    # bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x7, coding_rules)
 
-    dna_sequences_I1 = binary_to_dna(bin_sequences_I1, x6, coding_rules)
-    bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x5, coding_rules)
-    dna_sequences_I2 = binary_to_dna(bin_sequences_I2, x6, coding_rules)
-    bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x5, coding_rules)
-    dna_sequences_I3 = binary_to_dna(bin_sequences_I3, x6, coding_rules)
-    bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x5, coding_rules)
+    # dna_sequences_I1 = binary_to_dna(bin_sequences_I1, x6, coding_rules)
+    # bin_sequences_I1 = dna_to_binary(dna_sequences_I1, x5, coding_rules)
+    # dna_sequences_I2 = binary_to_dna(bin_sequences_I2, x6, coding_rules)
+    # bin_sequences_I2 = dna_to_binary(dna_sequences_I2, x5, coding_rules)
+    # dna_sequences_I3 = binary_to_dna(bin_sequences_I3, x6, coding_rules)
+    # bin_sequences_I3 = dna_to_binary(dna_sequences_I3, x5, coding_rules)
+
+    dna_channel_blocks = [binary_to_dna(bin_ch, x8, coding_rules) for bin_ch in bin_channel_blocks]
+    bin_channel_blocks = [dna_to_binary(dna_ch, x7, coding_rules) for dna_ch in dna_channel_blocks]
+    dna_channel_blocks = [binary_to_dna(bin_ch, x6, coding_rules) for bin_ch in bin_channel_blocks]
+    bin_channel_blocks = [dna_to_binary(dna_ch, x5, coding_rules) for dna_ch in dna_channel_blocks]
+
 
     # 转换回十进制整数
-    blocks_I1 = convert_binary_to_decimal(bin_sequences_I1)
-    blocks_I2 = convert_binary_to_decimal(bin_sequences_I2)
-    blocks_I3 = convert_binary_to_decimal(bin_sequences_I3)
+    # blocks_I1 = convert_binary_to_decimal(bin_sequences_I1)
+    # blocks_I2 = convert_binary_to_decimal(bin_sequences_I2)
+    # blocks_I3 = convert_binary_to_decimal(bin_sequences_I3)
+    channels_blocks = [convert_binary_to_decimal(bin_ch) for bin_ch in bin_channel_blocks]
 
-    # # 应用 XOR 操作
-    dncrypted_blocks_I1 = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(blocks_I1, blocks_Q)]
-    dncrypted_blocks_I2 = [np.bitwise_xor(block_I2, block_Q) for block_I2, block_Q in zip(blocks_I2, blocks_Q)]
-    dncrypted_blocks_I3 = [np.bitwise_xor(block_I3, block_Q) for block_I3, block_Q in zip(blocks_I3, blocks_Q)]
+    # 解密Q置乱
+    # dncrypted_blocks_I1 = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(blocks_I1, blocks_Q)]
+    # dncrypted_blocks_I2 = [np.bitwise_xor(block_I2, block_Q) for block_I2, block_Q in zip(blocks_I2, blocks_Q)]
+    # dncrypted_blocks_I3 = [np.bitwise_xor(block_I3, block_Q) for block_I3, block_Q in zip(blocks_I3, blocks_Q)]
+    dncrypted_channels_blocks = []
+    for channel_blocks in channels_blocks:
+        dncrypted_channel = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(channel_blocks, blocks_Q)]
+        dncrypted_channels_blocks.append(dncrypted_channel)
 
-    I1_prime = reshape_blocks_to_channel(dncrypted_blocks_I1, height, width)
-    I2_prime = reshape_blocks_to_channel(dncrypted_blocks_I2, height, width)
-    I3_prime = reshape_blocks_to_channel(dncrypted_blocks_I3, height, width)
+    # I1_prime = reshape_blocks_to_channel(dncrypted_blocks_I1, height, width)
+    # I2_prime = reshape_blocks_to_channel(dncrypted_blocks_I2, height, width)
+    # I3_prime = reshape_blocks_to_channel(dncrypted_blocks_I3, height, width)
+    decrypted_channels = [reshape_blocks_to_channel(ch, height, width) for ch in dncrypted_channels_blocks]
 
-    decrypted_img = cv2.merge((I1_prime, I2_prime, I3_prime))
+    decrypted_img = cv2.merge(decrypted_channels)
 
     return (True, decrypted_img)
 
@@ -749,11 +779,11 @@ def check_decryption_pixel(plain_path, decrypted_path):
     if plain_img.shape != decrypted_img.shape:
         return False
     difference = cv2.absdiff(plain_img, decrypted_img)
-    b, g, r = cv2.split(difference)
-    if cv2.countNonZero(b) == 0 and cv2.countNonZero(g) == 0 and cv2.countNonZero(r) == 0:
-        return True
-    else:
-        return False
+    split_channels = cv2.split(difference)
+    for channel in split_channels:
+        if cv2.countNonZero(channel) != 0:
+            return False
+    return True
 
 
 def check_decryption_psnr(plain_path: str, decrypted_path: str):
@@ -780,7 +810,7 @@ def encrypt_and_decrypt(plain_path: str = None, cipher_path: str = None, decrypt
     plain_img = cv2.imread(plain_path)
     if plain_img is None:
         raise FileNotFoundError(f"Unable to load image at {plain_path}")
-    height, width = cv2.split(plain_img)[0].shape
+    height, width = plain_img.shape[:2]
 
     if ENABLE_SYNC_CHECK:
         cnt = 0
