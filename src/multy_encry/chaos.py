@@ -17,13 +17,15 @@ import hashlib
 
 # --- 配置路径 (集中管理) ---
 
-# 1. 定义实验的主根目录 
-BASE_EXPERIMENT_DIR = "experiments/w501/test_data"
+# 定义实验的主根目录 
+BASE_EXPERIMENT_DIR = "experiments/w502"
+# 定义数据实验目录
+DATA_EXPERIMENT_DIR = os.path.join(BASE_EXPERIMENT_DIR, "hyper_kvasir")
 
-# 2. 定义输入目录 
-PLAIN_DIR = os.path.join(BASE_EXPERIMENT_DIR, "plain_img")   # 原图文件夹
-CIPHER_DIR = os.path.join(BASE_EXPERIMENT_DIR, "cipher_img") # 密图文件夹
-DECRYPTED_DIR = os.path.join(BASE_EXPERIMENT_DIR, "decrypted_img") # 解密图文件夹
+# 定义输入目录 
+PLAIN_DIR = os.path.join(DATA_EXPERIMENT_DIR, "plain_img")   # 原图文件夹
+CIPHER_DIR = os.path.join(DATA_EXPERIMENT_DIR, "cipher_img") # 密图文件夹
+DECRYPTED_DIR = os.path.join(DATA_EXPERIMENT_DIR, "decrypted_img") # 解密图文件夹
 
 # 模型文件所在目录
 MODEL_DIR = "experiments/exp_lorenz/lorenz_f2_lr5en5_s1m.zip"
@@ -746,7 +748,7 @@ def encrypt_and_decrypt(plain_path: str = None, cipher_path: str = None, decrypt
 
 def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
     """
-    遍历 source_dir 下的所有 png 图片，进行加密和解密，
+    遍历 source_dir 下的所有 diff 图片，进行加密和解密，
     并将结果分别保存到 cipher_dir 和 decrypted_dir。
     如果 decrypted_dir 中已存在同名文件，则跳过（增量更新）。
     """
@@ -769,8 +771,8 @@ def process_images_in_folder(source_dir, cipher_dir, decrypted_dir):
     print(f"Starting batch processing in: {source_dir}\n" + "-"*40)
 
     for file_name in files:
-        # 3. 过滤文件，只处理 png (忽略大小写)
-        if file_name.lower().endswith('.png'):
+        # 3. 过滤文件，只处理 tiff (忽略大小写)
+        if file_name.lower().endswith('.tiff'):
             
             # 构造完整路径
             plain_path = os.path.join(source_dir, file_name)
