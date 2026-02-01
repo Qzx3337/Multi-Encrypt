@@ -159,7 +159,7 @@ def reshape_sequence_to_Q(logistic_sequence: list, height: int = M_image, width:
     return Q
 
 
-def split_into_blocks(matrix: np.ndarray, height: int = M_image, width: int = N_image, p: int = p)-> list:
+def split_into_blocks(matrix: np.ndarray, p: int = p)-> list:
     """
     将二维矩阵拆分为一系列 p x p 的小块。
     
@@ -170,6 +170,7 @@ def split_into_blocks(matrix: np.ndarray, height: int = M_image, width: int = N_
         blocks (list of np.ndarray): 包含所有 p x p 小块的列表.
     """
     blocks = []
+    height, width = matrix.shape
     for i in range(0, height, p):  # 确保不超出边界
         for j in range(0, width, p):
             block = matrix[i:i + p, j:j + p]
@@ -438,16 +439,16 @@ def encrypt(
     # blocks_I1 = split_into_blocks(blue, height, width)
     # blocks_I2 = split_into_blocks(green, height, width)
     # blocks_I3 = split_into_blocks(red, height, width)
-    channels_blocks = [split_into_blocks(ch, height, width) for ch in channels]
-    blocks_Q = split_into_blocks(Q, height, width)
+    channels_blocks = [split_into_blocks(ch) for ch in channels]
+    blocks_Q = split_into_blocks(Q)
 
     # encrypted_blocks_I1 = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(blocks_I1, blocks_Q)]
     # encrypted_blocks_I2 = [np.bitwise_xor(block_I2, block_Q) for block_I2, block_Q in zip(blocks_I2, blocks_Q)]
     # encrypted_blocks_I3 = [np.bitwise_xor(block_I3, block_Q) for block_I3, block_Q in zip(blocks_I3, blocks_Q)]
 
     diffused_channels = []
-    for blocks in channels_blocks:
-        diffused_channel = [np.bitwise_xor(block_I1, block_Q) for block_I1, block_Q in zip(blocks, blocks_Q)]
+    for blocks_I in channels_blocks:
+        diffused_channel = [np.bitwise_xor(block_I, block_Q) for block_I, block_Q in zip(blocks_I, blocks_Q)]
         diffused_channels.append(diffused_channel)
 
 
@@ -554,7 +555,7 @@ def decrypt(
     num_iterations = height * width  # Number of iterations
     logistic_sequence = logistic_map(theta, initial_value_of_Q, num_iterations - 1)
     Q = reshape_sequence_to_Q(logistic_sequence, height, width)
-    blocks_Q = split_into_blocks(Q, height, width)
+    blocks_Q = split_into_blocks(Q)
 
     # 量化混沌序列
     x5, x6, x7, x8 = slave_sequence
@@ -563,7 +564,7 @@ def decrypt(
     # blocks_I1 = split_into_blocks(blue_c, height, width)
     # blocks_I2 = split_into_blocks(green_c, height, width)
     # blocks_I3 = split_into_blocks(red_c, height, width) 
-    cipher_channel_blocks = [split_into_blocks(ch, height, width) for ch in cipher_channels]
+    cipher_channel_blocks = [split_into_blocks(ch) for ch in cipher_channels]
 
     # DNA解密
 
@@ -778,11 +779,11 @@ def check_decryption_pixel(plain_path, decrypted_path):
     if plain_img.shape != decrypted_img.shape:
         return False
     difference = cv2.absdiff(plain_img, decrypted_img)
-    b, g, r = cv2.split(difference)
-    if cv2.countNonZero(b) == 0 and cv2.countNonZero(g) == 0 and cv2.countNonZero(r) == 0:
-        return True
-    else:
-        return False
+    split_channels = cv2.split(difference)
+    for channel in split_channels:
+        if cv2.countNonZero(channel) != 0:
+            return False
+    return True
 
 
 def check_decryption_psnr(plain_path: str, decrypted_path: str):
@@ -809,7 +810,7 @@ def encrypt_and_decrypt(plain_path: str = None, cipher_path: str = None, decrypt
     plain_img = cv2.imread(plain_path)
     if plain_img is None:
         raise FileNotFoundError(f"Unable to load image at {plain_path}")
-    height, width = cv2.split(plain_img)[0].shape
+    height, width = plain_img.shape[:2]
 
     if ENABLE_SYNC_CHECK:
         cnt = 0
