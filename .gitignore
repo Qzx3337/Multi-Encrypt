@@ -1,10 +1,14 @@
 
-*.pdf
-*.zip
-
 data/*
+
 experiments/*
+!experiments/exp_lorenz
+experiments/exp_lorenz/*
+!experiments/exp_lorenz/lorenz_f2_lr5en5_s1m.zip
+
+src/**/*.zip
+src/**/*.pdf
+
 src/chaos_apl/
 src/DRL/export_errors_csv/
 src/DRL/lorenztensorboard2/
-!src/DRL/lorenz_f2_lr5en5_s1m.zip
