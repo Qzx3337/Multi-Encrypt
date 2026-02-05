@@ -38,7 +38,7 @@ def process_array_with_kalman(arr, measurement_uncertainty=1e-2, process_varianc
     return filtered_arr
 
 
-class ChaosEncryptor:
+class MultiEncryptor:
     def __init__(self, model_path, password="password987", block_size=8, enable_sync_check=True):
         """
         初始化加密器，加载模型和配置
@@ -699,17 +699,17 @@ if __name__ == "__main__":
     DATABASE_DIR = os.path.join(EXPERMENT_DIR, "hyper_kvasir")
     MODEL_PATH = "experiments/exp_lorenz/lorenz_f2_lr5en5_s1m.zip"
     
-    # 1. 实例化类
-    encryptor = ChaosEncryptor(
-        model_path=MODEL_PATH, 
-        password="my_secure_password",
-        block_size=8,
-        enable_sync_check=True
-    )
+    # # 1. 实例化类
+    # encryptor = ChaosEncryptor(
+    #     model_path=MODEL_PATH, 
+    #     password="my_secure_password",
+    #     block_size=8,
+    #     enable_sync_check=True
+    # )
 
-    # 2. 调用批处理
-    encryptor.process_unimodal_folder(
-        source_dir=os.path.join(DATABASE_DIR, "plain_img"),
-        cipher_dir=os.path.join(DATABASE_DIR, "cipher_img"),
-        decrypted_dir=os.path.join(DATABASE_DIR, "decrypted_img")
-    )
+    # # 2. 调用批处理
+    # encryptor.process_unimodal_folder(
+    #     source_dir=os.path.join(DATABASE_DIR, "plain_img"),
+    #     cipher_dir=os.path.join(DATABASE_DIR, "cipher_img"),
+    #     decrypted_dir=os.path.join(DATABASE_DIR, "decrypted_img")
+    # )
