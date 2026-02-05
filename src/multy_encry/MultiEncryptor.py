@@ -56,6 +56,9 @@ class MultiEncryptor:
         """
         初始化加密器，加载模型和配置
         """
+        
+        if not os.path.exists(model_path):
+            raise RuntimeError("[error] 模型文件不存在")
         self.model_path = model_path
         self.password = password
         self.p = block_size  
@@ -885,7 +888,6 @@ class MultiEncryptor:
             password (str, optional): 用户输入的密码字符串。如果没有密码，则为 None。
 
         Returns:
-            is_success (bool): 解密是否成功的标志。
             decrypted_img (np.ndarray or None): 解密后的图像矩阵，如果解密失败则为 None。
         """
 
@@ -949,7 +951,7 @@ class MultiEncryptor:
 
         decrypted_img = cv2.merge(channels)
 
-        return (True, decrypted_img)
+        return decrypted_img
 
 
     def generate_with_retry(self, height, width):
@@ -993,8 +995,56 @@ class MultiEncryptor:
         return cipher_img, dec_img
 
 
-    def process_multimodal_folder(self):
-        pass
+    def encry_and_decry_one_mat(self, plain_mat: np.ndarray, cipher_path: str, save_mode: int = 1)-> np.ndarray:
+        """
+        对单个矩阵进行加密解密,保存密文文件到磁盘.
+
+        Args:
+            plain_mat (np.ndarray): 明文矩阵(任意)
+            cipher_path (str): 密文保存位置
+            save_mode (int): 保存格式, 
+                0 为原封不动的保存, 
+                1 为仅保存前三个通道tiff格式(bgr)
+
+        Returns:
+            decrypted_mat (np.ndarray): 解密出的矩阵,预期与明文矩阵完全一致.
+        
+        """
+        
+        # 生成混沌序列
+        height, width = plain_mat.shape[:2]
+        master_seq, slave_seq = self.generate_with_retry(height, width)
+
+        # self.visualize_chaos_seq(master_seq,
+        #                         os.path.join(EXPERMENT_DIR, "draw_disp", f"x_int.png"),
+        #                         128)
+        # self.visualize_chaos_seq(slave_seq,
+        #                         os.path.join(EXPERMENT_DIR, "draw_disp", f"y_int_{cnt}.png"),
+        #                         128)
+        # raise RuntimeError("debug here")
+
+        # 加密
+        cipher_img, key = self.encrypt(master_seq, plain_mat)
+        if save_mode == 0:
+            # 原状保存
+            cv2.imwrite(cipher_path, cipher_img)
+            print(f" 成功保存 {cipher_img.shape[2]} 通道图像至: {cipher_path}")
+        elif save_mode == 1:
+            # 保存为BGR彩色图像.tiff
+            cv2.imwrite(cipher_path, cipher_img[:, :, :3])
+            print(f" 成功保存 BGR 图像至: {cipher_path}")
+        else:
+            raise ValueError("save_mode 值错误,不存在这种保存模式")
+
+        # 解密
+        dec_img = self.decrypt(slave_seq, cipher_img, key)
+
+        # 验证
+        if not self.check_img_pixel(plain_mat, dec_img):
+            print(f"Warning: Decrypted image does not match the original for {os.path.basename(cipher_path)}.")
+
+        return dec_img
+
 
     def process_unimodal_folder(self, source_dir, cipher_dir, decrypted_dir):
         """
@@ -1040,7 +1090,7 @@ class MultiEncryptor:
                 print(f"成功保存 {cipher_img.shape[2]} 通道图像至: {cipher_path}")
 
                 # 解密
-                incorrect_key, dec_img = self.decrypt(slave_seq, cipher_img, key)
+                dec_img = self.decrypt(slave_seq, cipher_img, key)
                 cv2.imwrite(decrypted_path, dec_img)
                 print(f"成功保存 {dec_img.shape[2]} 通道图像至: {decrypted_path}")
 
