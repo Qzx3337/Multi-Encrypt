@@ -105,8 +105,14 @@ class TiffPreprocessor:
 
 if __name__ == "__main__":
     # 配置路径
-    input_folder = "data/raw_images/hyper_kvasir"   # 你的 png/jpg 文件夹
-    output_folder = "data/hyper_kvasir" # 输出文件夹
+    # data/raw_data/zky/jpeg
+    # input_folder = os.path.join("data", "raw_data", "zky", "jpeg") 
+    # output_folder = os.path.join("data", "zky", "tiff_imgs")
+
+    # data\raw_data\hyper_kvasir\images
+    input_folder = os.path.join("data", "raw_data", "hyper_kvasir", "images") 
+    output_folder = os.path.join("data", "hyper_kvasir", "images")
+
 
     # 1. 实例化类
     processor = TiffPreprocessor(input_folder, output_folder)

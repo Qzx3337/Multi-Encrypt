@@ -11,16 +11,14 @@ import hashlib
 
 
 # 配置路径
-EXPERMENT_DIR = "experiments/w502"
+EXPERMENT_DIR = os.path.join("experiments", "w502")
 DRAW_DIR = os.path.join(EXPERMENT_DIR, "draw_disp")
 DATABASE_DIR = os.path.join(EXPERMENT_DIR, "hyper_kvasir")
-MODEL_PATH = "experiments/exp_lorenz/lorenz_f2_lr5en5_s1m.zip"
+MODEL_PATH = os.path.join("experiments", "exp_lorenz", "lorenz_f2_lr5en5_s1m.zip")
 
 ENABLE_SYNC_CHECK = True
 KALMAN_FLITER_TIMES = 1
 CLIP_STEP = 3000
-
-
 
 
 class KalmanFilter1D:
@@ -665,6 +663,7 @@ class MultiEncryptor:
         delta = 1.25 * epsilon_max
         # 量化步长 (根据你的要求 Q = 4 * delta)
         # 这样设定后，每个量化箱(bin)的中心有效区域宽度为 2*delta，两边死区各占 delta
+        # 可根据动态范围更改这个倍数
         Q = 5 * delta
         
         # 2. 初始化结果容器 (8个通道)
@@ -672,6 +671,9 @@ class MultiEncryptor:
         quantized_channels = [[] for _ in range(8)]
         
         # 3. 循环生成，直到所有通道都填满 target_length
+        # 注意这里采取的方案是不进行坐标对齐的，效率更高
+        # 所有量化后的坐标值已经失去空间位置的语义，但是对加密任务无影响
+        # 如果对其坐标应该四个序列同时弃取
         while True:
             # 检查当前各通道的最小长度
             current_lens = [len(c) for c in quantized_channels]
@@ -682,10 +684,10 @@ class MultiEncryptor:
                 break
             
             # 4. 计算需要补货的数量
-            # 预估效率：由于 Q=4delta, 有效区占 2delta (50%)，死区占 2delta (50%)
-            # 考虑到随机性，我们请求 2.5 倍于缺口的量，防止频繁调用小batch
+            # 预估效率：效率 = 2 * delta / Q
+            # 考虑到随机性，我们请求 1.2 倍于缺口的量，防止频繁调用小batch
             needed = target_length - min_len
-            batch_size = int(needed * Q / delta * 1.2) + 10  # +10 是为了防止 needed 很小时 batch 为 0
+            batch_size = int(needed / (2 * delta / Q) * 1.2) + 10  # +10 是为了防止 needed 很小时 batch 为 0
             
             # 5. 调用你的原始序列生成器
             # raw_data shape: (8, batch_size)
@@ -1025,10 +1027,10 @@ class MultiEncryptor:
                 master_seq, slave_seq = self.generate_with_retry(height, width)
 
                 self.visualize_chaos_seq(master_seq,
-                                        os.path.join(EXPERMENT_DIR, f"draw_disp/x_int_{cnt}.png"),
+                                        os.path.join(EXPERMENT_DIR, "draw_disp", f"x_int_{cnt}.png"),
                                         128)
                 # self.visualize_chaos_seq(slave_seq,
-                #                         os.path.join(EXPERMENT_DIR, f"draw_disp/y_int_{cnt}.png"),
+                #                         os.path.join(EXPERMENT_DIR, "draw_disp", f"y_int_{cnt}.png"),
                 #                         128)
                 # raise RuntimeError("debug here")
 
