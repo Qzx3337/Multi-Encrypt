@@ -1,163 +1,165 @@
-
-import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from glob import glob
+import os
 
-# --- 配置路径 (集中管理) ---
+# experiments\w502\zky_plain\images
+PLAIN_DIR= os.path.join("experiments", "w502", "zky_plain", "images")
+CIPHER_DIR = os.path.join("experiments", "w502", "zky_cipher")
+HIST_DIR = os.path.join("experiments", "w502", "zky_hist")
 
-# 1. 定义实验的主根目录 
-BASE_EXPERIMENT_DIR = "experiments/w201/lung_CT"
-
-# 2. 定义输入目录 
-PLAIN_DIR = os.path.join(BASE_EXPERIMENT_DIR, "plain_img")   # 原图文件夹
-CIPHER_DIR = os.path.join(BASE_EXPERIMENT_DIR, "cipher_img") # 密图文件夹
-
-# 3. 定义分析结果的总输出目录 
-ANALYSIS_DIR = os.path.join(BASE_EXPERIMENT_DIR, "analysis")
-
-# --- ------------------ ---
-
-def draw_and_save_hist(data, save_path, channel_color, use_log, y_limit=None, title_suffix=""):
+def plot_histogram_comparison(plain_path, cipher_path, hist_path, log_scale=True):
     """
-    绘制并保存单个通道的直方图
-    """
-    plt.figure(figsize=(6, 4))
+    绘制明文和密文图像在B, G, R三个通道上的直方图对比。
     
-    # 绘制直方图
-    # bins=256, range=[0, 256] 确保覆盖所有像素值
-    plt.hist(data.ravel(), bins=256, range=[0, 256], color=channel_color, alpha=0.99)
-    
-    # 设置坐标轴
-    plt.xlim([0, 256])
-    
-    if use_log:
-        plt.yscale('log')
-        plt.ylabel("Frequency (Log Scale)")
-        # Log模式下，如果要求对齐，则手动设置ylim
-        if y_limit:
-            # log坐标下底不能为0，通常设为0.5或1，顶设为计算出的最大值*1.1以留白
-            plt.ylim(bottom=0.5, top=y_limit * 1.5) 
-    else:
-        plt.ylabel("Frequency")
-        # 线性模式下，通常自动调整，但如果传入了limit也可以设置
-        # 你的需求是：线性模式下不强制对齐，所以这里通常忽略 y_limit
-        pass
-
-    plt.title(f"Histogram {title_suffix}")
-    # plt.grid(True, which="both", ls="--", alpha=0.3)
-    
-    # 保存并关闭，释放内存
-    plt.savefig(save_path, dpi=150, bbox_inches='tight')
-    plt.close()
-
-def generate_comparison_histograms(plain_dir, cipher_dir, output_root="RGB_hist_log", use_log=True):
-    """
-    主处理函数
     Args:
-        plain_dir(str): 明文图片目录
-        cipher_dir(str): 密文图片目录
-        output_root(str): 输出根目录
-        use_log(bool): 是否使用对数坐标 (默认 True)
+        plain_path (str): 明文图像路径
+        cipher_path (str): 密文图像路径
+        hist_path (str): 结果保存路径 (包含文件名，如 result/test_hist.png)
+        log_scale (bool): 是否开启对数坐标
     """
-    # 1. 创建输出目录
-    if not os.path.exists(output_root):
-        os.makedirs(output_root)
-        print(f"Created output directory: {output_root}")
+    # 1. 读取图像
+    img_plain = cv2.imread(plain_path)
+    img_cipher = cv2.imread(cipher_path)
 
-    # 获取所有png文件 (假设明文和密文文件名一致)
-    plain_files = sorted(glob(os.path.join(plain_dir, "*.png")))
+    if img_plain is None:
+        print(f"Error: 无法读取明文图像: {plain_path}")
+        return
+    if img_cipher is None:
+        print(f"Error: 无法读取密文图像: {cipher_path}")
+        return
+
+    # 2. 设置绘图风格
+    # 使用浅一点的颜色以便论文排版 (B, G, R 顺序对应的浅色)
+    colors = ['#5c9dff', '#6bdc6b', '#ff6b6b']  # 浅蓝, 浅绿, 浅红
+    channel_names = ['Blue Channel', 'Green Channel', 'Red Channel']
     
-    print(f"Found {len(plain_files)} images to process...")
-    print(f"Mode: {'Log Scale (Aligned)' if use_log else 'Linear Scale (Auto)'}")
+    # 创建画布：2行3列
+    fig, axes = plt.subplots(2, 3, figsize=(15, 8), dpi=100)
+    # 调整子图间距
+    plt.subplots_adjust(wspace=0.3, hspace=0.3)
+    
+    # 3. 循环处理 B, G, R 三个通道
+    for i in range(3):
+        # 获取当前通道数据 (OpenCV默认为BGR顺序: 0-B, 1-G, 2-R)
+        # 即使通道数>3，也只取前三个
+        plain_chan = img_plain[:, :, i]
+        cipher_chan = img_cipher[:, :, i]
 
-    for p_path in plain_files:
-        filename = os.path.basename(p_path)
+        # 计算直方图
+        hist_plain = cv2.calcHist([plain_chan], [0], None, [256], [0, 256])
+        hist_cipher = cv2.calcHist([cipher_chan], [0], None, [256], [0, 256])
+
+        # 获取当前通道的绘图轴
+        ax_plain = axes[0, i]
+        ax_cipher = axes[1, i]
+
+        # --- 绘制明文直方图 ---
+        ax_plain.fill_between(range(256), hist_plain.flatten(), color=colors[i], alpha=0.6)
+        ax_plain.set_xlim([0, 255])
+        ax_plain.set_title(f'Plain - {channel_names[i]}')
+        # ax_plain.grid(True, linestyle='--', alpha=0.3)
+
+        # --- 绘制密文直方图 ---
+        ax_cipher.fill_between(range(256), hist_cipher.flatten(), color=colors[i], alpha=0.6)
+        ax_cipher.set_xlim([0, 255])
+        ax_cipher.set_title(f'Cipher - {channel_names[i]}')
+        # ax_cipher.grid(True, linestyle='--', alpha=0.3)
+
+        # --- 处理对数坐标与轴对齐逻辑 ---
+        if log_scale:
+            # 开启对数坐标
+            ax_plain.set_yscale('log')
+            ax_cipher.set_yscale('log')
+            
+            # 计算两者的最大值，以便统一Y轴范围
+            # 注意：加1是为了防止log(0)错误，虽然fill_between通常处理得很好
+            max_val = max(hist_plain.max(), hist_cipher.max())
+            # 设置下限为1 (log坐标下不能为0)，上限稍微留点余量
+            y_limit = [0.5, max_val * 2] # *2 是为了给上方留点空间
+            
+            # 强制对齐两个图的Y轴
+            ax_plain.set_ylim(y_limit)
+            ax_cipher.set_ylim(y_limit)
+        else:
+            # 线性坐标下，通常直方图从0开始
+            ax_plain.set_ylim(bottom=0)
+            ax_cipher.set_ylim(bottom=0)
+
+    # 4. 保存图像
+    # 确保目录存在
+    save_dir = os.path.dirname(hist_path)
+    if save_dir and not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        
+    plt.savefig(hist_path, bbox_inches='tight')
+    plt.close() # 关闭画布释放内存
+    print(f"Saved histogram comparison to: {hist_path}")
+
+
+def batch_plot_histograms(plain_dir, cipher_dir, hist_dir, log_scale=True):
+    """
+    批量处理文件夹下的图像直方图对比。
+    
+    Args:
+        plain_dir (str): 明文图像文件夹路径
+        cipher_dir (str): 密文图像文件夹路径
+        hist_dir (str): 结果保存文件夹路径
+        log_scale (bool): 是否开启对数坐标
+    """
+    # 确保输出目录存在
+    if not os.path.exists(hist_dir):
+        os.makedirs(hist_dir)
+
+    # 获取明文文件夹下的所有文件
+    files = os.listdir(plain_dir)
+    # 支持的图像扩展名
+    valid_exts = ['.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff']
+
+    count = 0
+    for filename in files:
+        name, ext = os.path.splitext(filename)
+        if ext.lower() not in valid_exts:
+            continue
+
+        # 构建完整路径
+        p_path = os.path.join(plain_dir, filename)
         c_path = os.path.join(cipher_dir, filename)
         
+        # 构建输出文件名：原文件名 + _hist + .png
+        h_path = os.path.join(hist_dir, f"{name}_hist.png")
+
         # 检查对应的密文文件是否存在
         if not os.path.exists(c_path):
-            print(f"Warning: Cipher image for {filename} not found. Skipping.")
-            continue
-            
-        # 读取图片 (OpenCV读取默认为BGR)
-        img_plain = cv2.imread(p_path)
-        img_cipher = cv2.imread(c_path)
-        
-        if img_plain is None or img_cipher is None:
-            print(f"Error reading {filename}. Skipping.")
+            print(f"Warning: 找不到对应的密文图像 {filename}，跳过。")
             continue
 
-        # 分离通道 (OpenCV是BGR，转为RGB顺序方便处理)
-        # 0:B, 1:G, 2:R -> 我们统一按 R, G, B 处理
-        planes_p = {'R': img_plain[:,:,2], 'G': img_plain[:,:,1], 'B': img_plain[:,:,0]}
-        planes_c = {'R': img_cipher[:,:,2], 'G': img_cipher[:,:,1], 'B': img_cipher[:,:,0]}
-        
-        # 定义颜色映射，用于画图颜色
-        colors = {'R': 'red', 'G': 'green', 'B': 'blue'}
-        
-        # 获取文件名主体 (去掉 .png)
-        name_base = os.path.splitext(filename)[0]
+        # 调用单次绘图函数
+        plot_histogram_comparison(p_path, c_path, h_path, log_scale)
+        count += 1
 
-        # 遍历三个通道 R, G, B
-        for channel in ['R', 'G', 'B']:
-            data_p = planes_p[channel]
-            data_c = planes_c[channel]
-            
-            # === 核心逻辑：计算对齐所需的 Y 轴上限 ===
-            current_y_limit = None
-            if use_log:
-                # 预先计算直方图频数，找出两张图中最大的频数
-                # np.histogram 返回 (counts, bin_edges)
-                hist_p, _ = np.histogram(data_p.ravel(), 256, [0, 256])
-                hist_c, _ = np.histogram(data_c.ravel(), 256, [0, 256])
-                
-                max_freq_p = hist_p.max()
-                max_freq_c = hist_c.max()
-                
-                # 取二者最大值，作为统一的 Y 轴上限
-                current_y_limit = max(max_freq_p, max_freq_c)
-            
-            # === 保存路径 ===
-            # 明文输出名: Plain_原文件名_R.png
-            save_name_p = f"{name_base}_plain_{channel}.png"
-            save_path_p = os.path.join(output_root, save_name_p)
-            
-            # 密文输出名: Cipher_原文件名_R.png
-            save_name_c = f"{name_base}_cipher_{channel}.png"
-            save_path_c = os.path.join(output_root, save_name_c)
-            
-            # === 绘图 ===
-            # 绘制明文
-            draw_and_save_hist(
-                data_p, save_path_p, colors[channel], 
-                use_log, current_y_limit, 
-                title_suffix=f"(Plain - {channel})"
-            )
-            
-            # 绘制密文
-            draw_and_save_hist(
-                data_c, save_path_c, colors[channel], 
-                use_log, current_y_limit, 
-                title_suffix=f"(Cipher - {channel})"
-            )
-            
-        print(f"Processed {filename} -> {output_root}/...")
+    print(f"--- 批量处理完成，共生成 {count} 张直方图对比图 ---")
 
-    print("All Done.")
 
-# ==========================================
-# 使用示例
-# ==========================================
+# --- 使用示例 ---
 if __name__ == "__main__":
-    # 请修改为你的实际路径
-    p_dir = PLAIN_DIR
-    c_dir = CIPHER_DIR  # 密文文件夹路径
-    output_root = os.path.join(ANALYSIS_DIR, "RGB_hist_log")
+    # 请根据你的实际路径修改下面的变量
     
-    # 开关控制：
-    # use_log=True  -> 对数坐标，且明文密文Y轴强制对齐 (推荐)
-    # use_log=False -> 线性坐标，Y轴自动缩放不对齐
-    generate_comparison_histograms(p_dir, c_dir, output_root, use_log=True)
+    # 示例 1: 单张测试
+    # plot_histogram_comparison(
+    #     plain_path='data/plain/lena.png', 
+    #     cipher_path='data/cipher/lena.png', 
+    #     hist_path='results/lena_hist_compare.png', 
+    #     log_scale=True
+    # )
+
+    # 示例 2: 批量测试
+    batch_plot_histograms(
+        plain_dir=PLAIN_DIR,
+        cipher_dir=CIPHER_DIR,
+        hist_dir=HIST_DIR,
+        log_scale=True
+    )
+
+    pass
 
