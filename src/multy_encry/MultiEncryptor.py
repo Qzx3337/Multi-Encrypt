@@ -11,9 +11,14 @@ import hashlib
 
 
 # 配置路径
-EXPERMENT_DIR = os.path.join("experiments", "w502")
+# data\zky\images
+DATABASE_NAME = "zky" # 数据集变动改这里
+EXPERMENT_DIR = os.path.join("experiments", "w503") # 做新实验改这里  
+PLAIN_IMGS_DIR = os.path.join("data", DATABASE_NAME, "images")
+CIPHER_IMGS_DIR = os.path.join(EXPERMENT_DIR, DATABASE_NAME, "cipher")
+DECRYPTED_IMGS_DIR = os.path.join(EXPERMENT_DIR, DATABASE_NAME, "decry", "images")
 DRAW_DIR = os.path.join(EXPERMENT_DIR, "draw_disp")
-DATABASE_DIR = os.path.join(EXPERMENT_DIR, "hyper_kvasir")
+
 MODEL_PATH = os.path.join("experiments", "exp_lorenz", "lorenz_f2_lr5en5_s1m.zip")
 
 ENABLE_SYNC_CHECK = True
@@ -319,6 +324,14 @@ class MultiEncryptor:
         Q = K1_prime.reshape(height, width)
         return Q
 
+
+    @staticmethod
+    def reshape_sequence_to_global_mask(logistic_seq:list, shape: list)-> np.ndarray:
+        seq_arr = np.array(logistic_seq)
+        quantlized_seq = np.mod(np.round(seq_arr * 1000), 256).astype(np.uint8)
+        Q = quantlized_seq.reshape(shape)
+        return Q
+    
     @staticmethod
     def channel_diffusion(channels: list, Q: np.ndarray):
         """
@@ -353,8 +366,15 @@ class MultiEncryptor:
         # channels[n - 1] ^= Q
         channels[n - 1] ^= channels[0]
 
-        for i in range(n):
-            channels[i] ^= Q
+        if Q.ndim == 2:
+            for i in range(n):
+                channels[i] ^= Q
+        elif Q.ndim == 3:
+            for i in range(n):
+                channels[i] ^= Q[:, :, i]
+        else:
+            print(f"Q.ndim is: {Q.ndim}")
+            raise ValueError("不合法的掩码矩阵Q")
 
         return channels
 
@@ -379,8 +399,15 @@ class MultiEncryptor:
         n = len(channels)
         if n < 2: return
 
-        for i in range(n):
-            channels[i] ^= Q
+        if Q.ndim == 2:
+            for i in range(n):
+                channels[i] ^= Q
+        elif Q.ndim == 3:
+            for i in range(n):
+                channels[i] ^= Q[:, :, i]
+        else:
+            print(f"Q.ndim is: {Q.ndim}")
+            raise ValueError("不合法的掩码矩阵Q")
 
         # 1. 首先恢复最后一个通道
         # 加密时: C[n-1] = C[n-1] ^ Q ^ C[0](new)
@@ -664,8 +691,7 @@ class MultiEncryptor:
         # 1. 设定物理参数
         # 保护带阈值
         delta = 1.25 * epsilon_max
-        # 量化步长 (根据你的要求 Q = 4 * delta)
-        # 这样设定后，每个量化箱(bin)的中心有效区域宽度为 2*delta，两边死区各占 delta
+        # 量化步长 
         # 可根据动态范围更改这个倍数
         Q = 5 * delta
         
@@ -810,7 +836,7 @@ class MultiEncryptor:
 
         channels = list(cv2.split(plain_img))
 
-        height, width = plain_img.shape[:2]
+        height, width, depth = plain_img.shape
 
         # ===== 阶段1.2：生成掩码矩阵Q =====
 
@@ -833,18 +859,24 @@ class MultiEncryptor:
         
         initial_value = self.string_to_initial_value(raw_seed_str)
         theta = 3.9999  # Example parameter value
+        
+        # 原逻辑：所有通道相同掩码
         num_iterations = height * width  # Number of iterations
-
         logistic_sequence = self.logistic_map(theta, initial_value, num_iterations - 1)
-        # print(len(logistic_sequence))
-
+        # 混沌序列变型得到Q
         Q = self.reshape_sequence_to_Q(logistic_sequence, height, width)
-
-
-        # ===== 阶段1.3：通道分别与Q做异或 =====
-
+        # 掩码矩阵Q置乱
         diffused_channels = self.channel_diffusion(channels, Q)
-        # diffused_channels = channels
+        # diffused_channels = channels # 消融实验
+        
+        # # 新逻辑：各通道掩码不同（提升直方图效果）
+        # num_iterations = height * width * depth  # Number of iterations
+        # logistic_sequence = self.logistic_map(theta, initial_value, num_iterations - 1)
+        # # 混沌序列变型得到Q
+        # Q = self.reshape_sequence_to_global_mask(logistic_sequence, plain_img.shape)
+        # # 掩码矩阵Q置乱
+        # diffused_channels = self.channel_diffusion(channels, Q)
+
 
         # ===== 阶段2：DNA加密 =====
 
@@ -915,13 +947,19 @@ class MultiEncryptor:
         # blue_c, green_c, red_c = split_channels(cipher_img)
         # height, width = blue_c.shape
         cipher_channels = cv2.split(cipher_img)
-        height, width = cipher_img.shape[:2]
+        height, width, depth = cipher_img.shape
         
         # 重新生成 Q 矩阵
         theta = 3.9999
         num_iterations = height * width  # Number of iterations
         logistic_sequence = self.logistic_map(theta, initial_value_of_Q, num_iterations - 1)
         Q = self.reshape_sequence_to_Q(logistic_sequence, height, width)
+
+        # theta = 3.9999
+        # num_iterations = height * width * depth # Number of iterations
+        # logistic_sequence = self.logistic_map(theta, initial_value_of_Q, num_iterations - 1)
+        # # Q = self.reshape_sequence_to_Q(logistic_sequence, height, width)
+        # Q = self.reshape_sequence_to_global_mask(logistic_sequence, cipher_img.shape)
 
         # 量化混沌序列
         x5, x6, x7, x8 = slave_sequence
@@ -1046,20 +1084,27 @@ class MultiEncryptor:
         return dec_img
 
 
-    def process_unimodal_folder(self, source_dir, cipher_dir, decrypted_dir):
+    def process_unimodal_folder(self, plain_imgs_dir, cipher_imgs_dir, decrypted_dir, k: int = 3):
         """
         批处理文件夹
         """
-        os.makedirs(cipher_dir, exist_ok=True)
+        os.makedirs(cipher_imgs_dir, exist_ok=True)
         os.makedirs(decrypted_dir, exist_ok=True)
         
-        files = [f for f in os.listdir(source_dir) if f.lower().endswith(('.tiff', '.tif'))]
+        files = [f for f in os.listdir(plain_imgs_dir) if f.lower().endswith(('.tiff', '.tif'))]
+        # print(f"type of files[0]: {type(files[0])}")
+        # print(f"files[0]: \n{files[0]}")
+        # raise RuntimeError("debug here")
+        files.sort()
         cnt = 0
         for file_name in files:
-            plain_path = os.path.join(source_dir, file_name)
-            cipher_path = os.path.join(cipher_dir, file_name)
+            plain_path = os.path.join(plain_imgs_dir, file_name)
+            cipher_path = os.path.join(cipher_imgs_dir, file_name)
             decrypted_path = os.path.join(decrypted_dir, file_name)
             cnt += 1
+            if cnt > k:
+                print(f"仅处理前{k}个项目")
+                break
 
             if os.path.exists(decrypted_path):
                 print(f"[SKIP] {file_name}")
@@ -1118,7 +1163,7 @@ if __name__ == "__main__":
 
     # 2. 调用批处理
     encryptor.process_unimodal_folder(
-        source_dir=os.path.join(DATABASE_DIR, "plain_img"),
-        cipher_dir=os.path.join(DATABASE_DIR, "cipher_img"),
-        decrypted_dir=os.path.join(DATABASE_DIR, "decrypted_img")
+        plain_imgs_dir=PLAIN_IMGS_DIR,
+        cipher_imgs_dir=CIPHER_IMGS_DIR,
+        decrypted_dir=DECRYPTED_IMGS_DIR
     )

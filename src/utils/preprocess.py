@@ -110,8 +110,8 @@ if __name__ == "__main__":
     # output_folder = os.path.join("data", "zky", "tiff_imgs")
 
     # data\raw_data\hyper_kvasir\images
-    input_folder = os.path.join("data", "raw_data", "hyper_kvasir", "images") 
-    output_folder = os.path.join("data", "hyper_kvasir", "images")
+    input_folder = os.path.join("data", "_raw_data", "test") 
+    output_folder = os.path.join("data", "test", "images")
 
 
     # 1. 实例化类

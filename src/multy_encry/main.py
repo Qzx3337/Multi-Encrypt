@@ -4,9 +4,21 @@ import cv2
 import pandas as pd
 import glob
 
-
 from MultimodalPacker import MultimodalPacker
 from MultiEncryptor import MultiEncryptor
+
+# 更改数据集
+# DATABASE_NAME = "zky"
+# DATABASE_NAME = "hyper_kvasir"
+DATABASE_NAME = "test"
+# 更改实验
+EXP_NAME = "w502" 
+
+# data\zky
+PLAIN_DIR = os.path.join("data", DATABASE_NAME)
+# experiments\w502\zky\cipher
+CIPHER_DIR = os.path.join("experiments", EXP_NAME, DATABASE_NAME, "cipher")
+OUTPUT_DIR = os.path.join("experiments", EXP_NAME, DATABASE_NAME, "decry")
 
 MODEL_PATH = os.path.join("experiments", "exp_lorenz", "lorenz_f2_lr5en5_s1m.zip")
 
@@ -133,10 +145,6 @@ def run_integrated_test(plain_dir, cipher_dir, output_dir, k=5):
 
 
 if __name__=="__main__":
-    # experiments\w502\zky_plain
-    PLAIN_DIR = os.path.join("experiments", "w502", "zky_plain")
-    CIPHER_DIR = os.path.join("experiments", "w502", "zky_cipher")
-    OUTPUT_DIR = os.path.join("experiments", "w502", "zky_decry")
     run_integrated_test(PLAIN_DIR, 
                         CIPHER_DIR, 
                         OUTPUT_DIR, 
