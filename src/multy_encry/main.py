@@ -12,7 +12,7 @@ from MultiEncryptor import MultiEncryptor
 # DATABASE_NAME = "hyper_kvasir"
 DATABASE_NAME = "test"
 # 更改实验
-EXP_NAME = "w502" 
+EXP_NAME = "w504" 
 
 # data\zky
 PLAIN_DIR = os.path.join("data", DATABASE_NAME)

@@ -304,26 +304,83 @@ class MultiEncryptor:
         return sequence
 
 
-    def reshape_sequence_to_Q(self, logistic_sequence: list, height: int, width: int) -> np.ndarray:
-        """
-        将混沌序列转换为掩码矩阵 Q。
-        Args:
-            logistic_sequence (list of float): 混沌序列列表，其中的变量为浮点数。
-            width (int): 图像的宽度。
-            height (int): 图像的高度。
-        Returns:
-            Q (np.ndarray): 掩码矩阵, 形状为 (width, height).
-        """
-        # 将列表转换为 NumPy 数组
-        K1_array = np.array(logistic_sequence)
+    # def reshape_sequence_to_Q(self, logistic_sequence: list, height: int, width: int) -> np.ndarray:
+    #     """
+    #     将混沌序列转换为掩码矩阵 Q。
+    #     Args:
+    #         logistic_sequence (list of float): 混沌序列列表，其中的变量为浮点数。
+    #         width (int): 图像的宽度。
+    #         height (int): 图像的高度。
+    #     Returns:
+    #         Q (np.ndarray): 掩码矩阵, 形状为 (width, height).
+    #     """
+    #     # 将列表转换为 NumPy 数组
+    #     K1_array = np.array(logistic_sequence)
 
-        # 量化：(0, 1)浮点数转换为 0-255 范围内的整数
+    #     # 量化：(0, 1)浮点数转换为 0-255 范围内的整数
+    #     K1_prime = np.mod(np.round(K1_array * 10 ** 4), 256).astype(np.uint8)
+
+    #     # 一维向量重塑为 (width, height) 形状的矩阵 Q
+    #     Q = K1_prime.reshape(height, width)
+    #     return Q
+    
+    def reshape_sequence_to_Q(self, logistic_sequence: list, height: int, width: int, block_size: int = 8) -> np.ndarray:
+        """
+        将混沌序列按照 8x8 块进行交织填充，以降低空间相关性。
+        填充逻辑：先填充所有块的(0,0)，再填充所有块的(0,1)...以此类推。
+        """
+        # 1. 基础转换与量化 (保持原逻辑)
+        K1_array = np.array(logistic_sequence)
         K1_prime = np.mod(np.round(K1_array * 10 ** 4), 256).astype(np.uint8)
 
-        # 一维向量重塑为 (width, height) 形状的矩阵 Q
-        Q = K1_prime.reshape(height, width)
-        return Q
+        # 2. 计算 Pad 后的尺寸
+        # 为了方便矩阵运算，我们将图像宽高扩展为 8 的倍数
+        h_blocks = math.ceil(height / block_size)
+        w_blocks = math.ceil(width / block_size)
+        
+        h_pad = h_blocks * block_size
+        w_pad = w_blocks * block_size
+        
+        total_pixels_needed = h_pad * w_pad
+        num_blocks = h_blocks * w_blocks
+        pixels_per_block = block_size * block_size
 
+        # 3. 序列长度检查与截取
+        # 如果序列不够长，需要循环补全 (防止越界)
+        if len(K1_prime) < total_pixels_needed:
+            repeats = math.ceil(total_pixels_needed / len(K1_prime))
+            K1_prime = np.tile(K1_prime, repeats)
+            print("logistic_sequence 不够长")
+        
+        # 截取刚好填满 Pad 后图像所需的长度
+        data_flat = K1_prime[:total_pixels_needed]
+
+        # 4. 核心变换逻辑 (使用 NumPy 维度操作代替循环)
+        
+        # 第一步：Reshape 成 (块内像素总数, 块的总数)
+        # 形状: (64, num_blocks)
+        # 这样 data[0] 就包含了所有块的第1个像素，data[1] 包含所有块的第2个像素...
+        # 符合你要求的 "序列第一批值分别赋给每个小块的左上角"
+        step1 = data_flat.reshape(pixels_per_block, num_blocks)
+
+        # 第二步：展开维度
+        # 形状: (8, 8, h_blocks, w_blocks) 
+        # 维度含义: (块内行 u, 块内列 v, 块的行索引 br, 块的列索引 bc)
+        step2 = step1.reshape(block_size, block_size, h_blocks, w_blocks)
+
+        # 第三步：维度置换 (Transpose)
+        # 我们需要的最终图像顺序是: (块的行索引, 块内行, 块的列索引, 块内列)
+        # 对应的轴变换为: (2, 0, 3, 1)
+        step3 = step2.transpose(2, 0, 3, 1)
+
+        # 第四步：合并维度还原为 2D 图像
+        # 形状: (h_pad, w_pad)
+        Q_padded = step3.reshape(h_pad, w_pad)
+
+        # 5. 裁剪回原始尺寸 (去除 Padding)
+        Q = Q_padded[:height, :width]
+
+        return Q
 
     @staticmethod
     def reshape_sequence_to_global_mask(logistic_seq:list, shape: list)-> np.ndarray:
@@ -860,8 +917,16 @@ class MultiEncryptor:
         initial_value = self.string_to_initial_value(raw_seed_str)
         theta = 3.9999  # Example parameter value
         
-        # 原逻辑：所有通道相同掩码
-        num_iterations = height * width  # Number of iterations
+        # num_iterations = height * width  # Number of iterations
+
+        h_blocks = math.ceil(height / self.p)
+        w_blocks = math.ceil(width / self.p)
+        
+        h_pad = h_blocks * self.p
+        w_pad = w_blocks * self.p
+        
+        num_iterations = h_pad * w_pad
+
         logistic_sequence = self.logistic_map(theta, initial_value, num_iterations - 1)
         # 混沌序列变型得到Q
         Q = self.reshape_sequence_to_Q(logistic_sequence, height, width)
@@ -952,6 +1017,15 @@ class MultiEncryptor:
         # 重新生成 Q 矩阵
         theta = 3.9999
         num_iterations = height * width  # Number of iterations
+        
+        h_blocks = math.ceil(height / self.p)
+        w_blocks = math.ceil(width / self.p)
+        
+        h_pad = h_blocks * self.p
+        w_pad = w_blocks * self.p
+        
+        num_iterations = h_pad * w_pad
+
         logistic_sequence = self.logistic_map(theta, initial_value_of_Q, num_iterations - 1)
         Q = self.reshape_sequence_to_Q(logistic_sequence, height, width)
 
