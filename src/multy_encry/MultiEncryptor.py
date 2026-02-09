@@ -12,8 +12,8 @@ import hashlib
 
 # 配置路径
 # data\zky\images
-DATABASE_NAME = "zky" # 数据集变动改这里
-EXPERMENT_DIR = os.path.join("experiments", "w503") # 做新实验改这里  
+DATABASE_NAME = "test" # 数据集变动改这里
+EXPERMENT_DIR = os.path.join("experiments", "w506") # 做新实验改这里  
 PLAIN_IMGS_DIR = os.path.join("data", DATABASE_NAME, "images")
 CIPHER_IMGS_DIR = os.path.join(EXPERMENT_DIR, DATABASE_NAME, "cipher")
 DECRYPTED_IMGS_DIR = os.path.join(EXPERMENT_DIR, DATABASE_NAME, "decry", "images")
@@ -26,34 +26,98 @@ KALMAN_FLITER_TIMES = 1
 CLIP_STEP = 3000
 
 
-class KalmanFilter1D:
-    def __init__(self, initial_estimate, measurement_uncertainty, process_variance):
-        self.estimate = initial_estimate
-        self.estimate_error = measurement_uncertainty
-        self.measurement_uncertainty = measurement_uncertainty
-        self.process_variance = process_variance
+class InterleaveSplitter:
+    def __init__(self, grid_size: int = 8):
+        """
+        Args:
+            grid_size (int): 将宽和高分为多少份，默认为8。
+                             生成的 Block 固定为 grid_size x grid_size。
+        """
+        self.grid = grid_size
 
-    def update(self, measurement):
-        # Prediction step
-        prediction = self.estimate
-        prediction_error = self.estimate_error + self.process_variance
+    def split(self, matrix: np.ndarray) -> list:
+        """
+        将二维矩阵拆分为交织块。
+        
+        Args:
+            matrix (np.ndarray): H x W 的图像矩阵
+        Returns:
+            blocks (list): 包含所有 grid_size x grid_size 小块的列表
+        """
+        h, w = matrix.shape
+        
+        # 1. 计算并执行 Padding (确保能被 grid_size 整除)
+        pad_h = (self.grid - h % self.grid) % self.grid
+        pad_w = (self.grid - w % self.grid) % self.grid
+        
+        matrix_pad = np.pad(matrix, ((0, pad_h), (0, pad_w)), mode='constant', constant_values=0)
+        matrix_pad = matrix_pad.astype(np.uint8)
+        h_pad, w_pad = matrix_pad.shape
+        
+        # 计算网格单元(Cell)尺寸
+        cell_h = h_pad // self.grid
+        cell_w = w_pad // self.grid
 
-        # Update step
-        kalman_gain = prediction_error / (prediction_error + self.measurement_uncertainty)
-        self.estimate = prediction + kalman_gain * (measurement - prediction)
-        self.estimate_error = (1 - kalman_gain) * prediction_error
+        # 2. 维度变换 (Vectorized)
+        # Reshape: (grid, cell_h, grid, cell_w)
+        reshaped = matrix_pad.reshape(self.grid, cell_h, self.grid, cell_w)
 
-        return self.estimate
+        # Transpose: 把 cell 维度移到前面 -> (cell_h, cell_w, grid, grid)
+        # 这样前两个维度遍历所有 block，后两个维度构成 block 内容
+        transposed = reshaped.transpose(1, 3, 0, 2)
 
-def process_array_with_kalman(arr, measurement_uncertainty=1e-2, process_variance=1e-5):
-    # 使用数组的第一个值作为初始估计值
-    initial_estimate = arr[0]
-    kf = KalmanFilter1D(initial_estimate, measurement_uncertainty, process_variance)
+        # 3. 展平为列表
+        blocks_array = transposed.reshape(-1, self.grid, self.grid)
+        
+        # 转换为 list
+        return [blocks_array[i] for i in range(blocks_array.shape[0])]
 
-    # 对数组中的每个元素进行卡尔曼滤波
-    filtered_arr = np.array([kf.update(num) for num in arr])
+    def merge(self, blocks: list, original_height: int, original_width: int) -> np.ndarray:
+        """
+        根据原始尺寸将 blocks 恢复为原图。
+        
+        Args:
+            blocks (list): split 函数生成的列表
+            original_height (int): 原图高度 (用于计算 padding 和 裁剪)
+            original_width (int): 原图宽度
+            
+        Returns:
+            matrix (np.ndarray): 恢复后的图像
+        """
+        # 1. 根据传入的原始尺寸，重新计算 Padding 后的尺寸
+        # 这是为了知道如何将 blocks 还原为大的矩阵
+        pad_h = (self.grid - original_height % self.grid) % self.grid
+        pad_w = (self.grid - original_width % self.grid) % self.grid
+        
+        h_pad = original_height + pad_h
+        w_pad = original_width + pad_w
+        
+        cell_h = h_pad // self.grid
+        cell_w = w_pad // self.grid
 
-    return filtered_arr
+        # 校验 blocks 数量是否匹配 (可选，但推荐)
+        expected_blocks = cell_h * cell_w
+        if len(blocks) != expected_blocks:
+            raise ValueError(f"Block 数量不匹配。期望 {expected_blocks}, 实际 {len(blocks)}。请检查传入的宽高是否正确。")
+
+        # 2. 堆叠并逆向 Reshape
+        blocks_array = np.array(blocks, dtype=np.uint8) # Shape: (N, grid, grid)
+        
+        # 还原为: (cell_h, cell_w, grid, grid)
+        reshaped_back = blocks_array.reshape(cell_h, cell_w, self.grid, self.grid)
+
+        # 3. 逆向 Transpose
+        # 从 (cell_h, cell_w, grid, grid) 变回 (grid, cell_h, grid, cell_w)
+        # 索引变换: 0->2, 1->3, 2->0, 3->1 => transpose(2, 0, 3, 1)
+        transposed_back = reshaped_back.transpose(2, 0, 3, 1)
+
+        # 4. 恢复大图并裁剪
+        matrix_pad = transposed_back.reshape(h_pad, w_pad)
+        
+        # 使用传入的原始尺寸进行裁剪
+        matrix = matrix_pad[:original_height, :original_width]
+
+        return matrix
 
 
 class MultiEncryptor:
@@ -847,31 +911,6 @@ class MultiEncryptor:
         master_sequence = quantized_seq[0:4]
         slave_sequence = quantized_seq[4:8]
 
-        # visualize_quantized_result(np.arange(num), xs[0], quantized_seq[0], 0, os.path.join(DRAW_DIR, 'dim0_cyclic_check.png'))
-        # visualize_quantized_result(np.arange(num), xs[1], quantized_seq[1], 1, os.path.join(DRAW_DIR, 'dim1_cyclic_check.png'))
-        # visualize_quantized_result(np.arange(num), xs[2], quantized_seq[2], 2, os.path.join(DRAW_DIR, 'dim2_cyclic_check.png'))
-        # visualize_quantized_result(np.arange(num), xs[3], quantized_seq[3], 3, os.path.join(DRAW_DIR, 'dim3_cyclic_check.png'))
-
-        
-        # # ===== 阶段2.1：将混沌序列量化到8个DNA编码规则 =====
-        # # 量化
-        # xs = [(np.mod(np.round(xi), 8) + 1).astype(np.uint8) for xi in xs]
-
-        # # 量化函数
-        # def quantlize_array(arr):
-        #     processed_arr = (np.mod(arr, 8) + 1).astype(np.uint8)
-        #     return processed_arr
-
-        # # 滤波与量化掺杂进行
-        # # for i in range(15):
-        # for i in range(KALMAN_FLITER_TIMES):
-        #     xs = [process_array_with_kalman(xi) for xi in xs]
-        #     xs = [quantlize_array(xi) for xi in xs]
-
-        # master_sequence = (xs[0], xs[1], xs[2], xs[3])
-        # slave_sequence = (xs[4], xs[5], xs[6], xs[7])
-
-
         return master_sequence, slave_sequence
 
     # --- 加密与解密主逻辑 ---
@@ -948,8 +987,12 @@ class MultiEncryptor:
         # ===== 阶段2.1：将混沌序列量化到8个DNA编码规则(已经在生成时完成) =====
 
         # ===== 阶段2.2：各通道转换为8位二进制字符串 =====
-        
-        channels_blocks = [self.split_into_blocks(ch) for ch in diffused_channels]
+
+        # 分块
+        # channels_blocks = [self.split_into_blocks(ch) for ch in diffused_channels]
+
+        splitter = InterleaveSplitter(grid_size=self.p)
+        channels_blocks = [splitter.split(ch) for ch in diffused_channels]
 
         bin_channels = [self.convert_to_8bit_binary(ch) for ch in channels_blocks]
 
@@ -962,7 +1005,8 @@ class MultiEncryptor:
 
         channels_blocks = [self.convert_binary_to_decimal(bin_ch) for bin_ch in bin_channels]
 
-        channels = [self.reshape_blocks_to_channel(ch, height, width) for ch in channels_blocks]
+        # channels = [self.reshape_blocks_to_channel(ch, height, width) for ch in channels_blocks]
+        channels = [splitter.merge(ch, height, width) for ch in channels_blocks]
 
         # ===== 阶段3：保存图像与生成密钥 =====
 
@@ -1039,7 +1083,10 @@ class MultiEncryptor:
         x5, x6, x7, x8 = slave_sequence
         
         # 分块
-        cipher_channel_blocks = [self.split_into_blocks(ch) for ch in cipher_channels]
+        # cipher_channel_blocks = [self.split_into_blocks(ch) for ch in cipher_channels]
+        
+        splitter = InterleaveSplitter(grid_size=self.p)
+        cipher_channel_blocks = [splitter.split(ch) for ch in cipher_channels]
 
         # DNA解密
 
@@ -1054,11 +1101,14 @@ class MultiEncryptor:
 
         # 转换回十进制整数
         channels_blocks = [self.convert_binary_to_decimal(bin_ch) for bin_ch in bin_channel_blocks]
-        diffused_channels = [self.reshape_blocks_to_channel(ch, height, width) for ch in channels_blocks]
+
+        # diffused_channels = [self.reshape_blocks_to_channel(ch, height, width) for ch in channels_blocks]
+        diffused_channels = [splitter.merge(ch, height, width) for ch in channels_blocks]
 
 
         # 解密Q置乱
         channels = self.channel_inverse_diffusion(diffused_channels, Q)
+        # 消融实验
         # channels = diffused_channels
 
         decrypted_img = cv2.merge(channels)
@@ -1230,7 +1280,7 @@ if __name__ == "__main__":
     # 1. 实例化类
     encryptor = MultiEncryptor(
         model_path=MODEL_PATH, 
-        password="my_secure_password",
+        password="my_password",
         block_size=8,
         enable_sync_check=ENABLE_SYNC_CHECK
     )
@@ -1239,5 +1289,6 @@ if __name__ == "__main__":
     encryptor.process_unimodal_folder(
         plain_imgs_dir=PLAIN_IMGS_DIR,
         cipher_imgs_dir=CIPHER_IMGS_DIR,
-        decrypted_dir=DECRYPTED_IMGS_DIR
+        decrypted_dir=DECRYPTED_IMGS_DIR,
+        k=3
     )

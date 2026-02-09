@@ -3,14 +3,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-DATABASE_NAME = "hyper_kvasir" # 更换数据集
-EXP_DATA_DIR = os.path.join("experiments", "w502", DATABASE_NAME) # 更换实验
-ENABLE_LOG_SCALE = True # 选择是否开启 log 坐标
+# 更换数据集
+DATABASE_NAME = "test" 
+# 更换实验
+EXP_ANME = "w506"
+# 选择是否开启 log 坐标
+ENABLE_LOG_SCALE = True
 
 # 路径配置
 PLAIN_DIR= os.path.join("data", DATABASE_NAME, "images")
-CIPHER_DIR = os.path.join(EXP_DATA_DIR, "cipher")
-HIST_DIR = os.path.join(EXP_DATA_DIR, "hist")
+CIPHER_DIR = os.path.join("experiments", EXP_ANME, DATABASE_NAME, "cipher")
+HIST_DIR = os.path.join("experiments", EXP_ANME, DATABASE_NAME, "hist")
 
 def plot_histogram_comparison(plain_path, cipher_path, hist_path, log_scale=True):
     """

@@ -6,7 +6,7 @@ import csv
 import random
 
 DATABASE_NAME = "test" 
-EXP_NAME = "w504" 
+EXP_NAME = "w507" 
 
 # --- 路径配置 ---
 PLAIN_DIR = os.path.join("data", DATABASE_NAME, "images")

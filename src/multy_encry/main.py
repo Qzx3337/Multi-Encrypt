@@ -12,7 +12,7 @@ from MultiEncryptor import MultiEncryptor
 # DATABASE_NAME = "hyper_kvasir"
 DATABASE_NAME = "test"
 # 更改实验
-EXP_NAME = "w504" 
+EXP_NAME = "w507" 
 
 # data\zky
 PLAIN_DIR = os.path.join("data", DATABASE_NAME)
@@ -87,9 +87,6 @@ def run_integrated_test(plain_dir, cipher_dir, output_dir, k=5):
         # print(f"  Packed Matrix Shape: {packed_matrix.shape} (Channel count increased by 1)")
         
         # --- 模拟：这里是 main.py 中传递给 Encryptor 的地方 ---
-        # encryptor.encrypt(packed_matrix) ...
-        # cipher = ...
-        # decrypted_matrix = encryptor.decrypt(cipher) ...
         cipher_save_name = os.path.join(cipher_dir, base_name)
         decrypted_matrix = encryptor.encry_and_decry_one_mat(packed_matrix, cipher_save_name)
         # 假设解密完美还原，直接将 packed_matrix 传给解包逻辑
